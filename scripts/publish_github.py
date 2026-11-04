@@ -191,7 +191,9 @@ def main():
     if asset["size"] != apk.stat().st_size:
         raise ValueError("Incomplete APK upload; release remains a draft.")
     published = api(f"/repos/{OWNER}/{REPO}/releases/{release['id']}", token, "PATCH", {"draft": False, "make_latest": "true"})
-    print(json.dumps({"repository": repo["html_url"], "release": published["html_url"], "apk": asset["browser_download_url"], "sha256": digest}, ensure_ascii=False))
+    published = api(f"/repos/{OWNER}/{REPO}/releases/{release['id']}", token)
+    final_asset = next(a for a in published["assets"] if a["name"] == "WaferAI-" + name + ".apk")
+    print(json.dumps({"repository": repo["html_url"], "release": published["html_url"], "apk": final_asset["browser_download_url"], "sha256": digest}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
