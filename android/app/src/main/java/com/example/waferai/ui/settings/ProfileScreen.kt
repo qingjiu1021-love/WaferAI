@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.example.waferai.R
 import com.example.waferai.data.local.WaferOverview
 import com.example.waferai.data.account.AccountUser
+import com.example.waferai.data.account.LocalUserProfile
 import com.example.waferai.ui.theme.*
 import com.example.waferai.ui.theme.UiText as Text
 
@@ -23,12 +24,23 @@ internal fun ProfileScreen(overview: WaferOverview?, modelCount: Int,
                            onTheme: () -> Unit, onLanguage: () -> Unit, onGeneral: () -> Unit,
                            onBackup: () -> Unit, onModels: () -> Unit, onHistory: () -> Unit,
                            account: AccountUser?, onAccount: () -> Unit, onAbout: () -> Unit,
+                           profile: LocalUserProfile, onEditProfile: () -> Unit,
                            modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         StudioHeader("我的", "WAFERAI / MY WORKSPACE", StudioIcon.PERSON)
+        StudioPanel(Modifier.fillMaxWidth(), scheme.primaryContainer) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                UserAvatar(profile)
+                Column(Modifier.weight(1f)) {
+                    Text(profile.name.ifBlank { account?.name ?: "访客" }, style = MaterialTheme.typography.titleLarge)
+                    Text(if (account == null) "本机访客资料" else "本机个人资料", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            androidx.compose.material3.TextButton(onEditProfile) { Text("编辑头像与昵称") }
+        }
         StudioAction(account?.name ?: "登录 / 注册", account?.identities?.joinToString(" · ") { it.label }
             ?: "邮箱、手机号及第三方账号", StudioIcon.PERSON, onAccount)
         StudioPanel(Modifier.fillMaxWidth(), scheme.primaryContainer) {

@@ -108,7 +108,7 @@ import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
 import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.mutableIntStateOf
 
-private enum class Page { OVERVIEW, WAFER, DATA, HISTORY, LOTS, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, ACCOUNT, ABOUT, LEGAL }
+private enum class Page { OVERVIEW, WAFER, DATA, HISTORY, LOTS, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
 
 private val tabs = listOf(
     Page.WAFER to "晶圆",
@@ -167,6 +167,7 @@ private fun WaferBottomBar(appearance: Appearance, selectedTab: Page, onSelect: 
 
 class MainActivity : ComponentActivity() {
     private val accountViewModel: AccountViewModel by viewModels()
+    private val userProfileViewModel: com.example.waferai.ui.settings.UserProfileViewModel by viewModels()
     private val updateViewModel: com.example.waferai.ui.settings.UpdateViewModel by viewModels()
     private companion object {
         var launchShown = false
@@ -245,6 +246,8 @@ class MainActivity : ComponentActivity() {
                 val aiState by aiViewModel.state.collectAsStateWithLifecycle()
                 val chatState by chatViewModel.state.collectAsStateWithLifecycle()
                 val accountState by accountViewModel.state.collectAsStateWithLifecycle()
+                val userProfileState by userProfileViewModel.state.collectAsStateWithLifecycle()
+                LaunchedEffect(accountState.endpoint, accountState.user?.id) { userProfileViewModel.select(accountState.endpoint, accountState.user?.id) }
                 LaunchedEffect(accountState.browser) {
                     accountState.browser?.let { url ->
                         runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
@@ -281,7 +284,7 @@ class MainActivity : ComponentActivity() {
                 val scrollStates = rememberSaveableStateHolder()
                 val selectedTab = when (page) {
                     Page.HISTORY, Page.LOTS, Page.COMPARE, Page.TREND -> Page.DATA
-                    Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT, Page.ABOUT, Page.LEGAL -> Page.PROFILE
+                    Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT, Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
                     Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
                     Page.PLUGINS -> if (pluginReturn in setOf(Page.AI, Page.CHAT)) Page.AI else Page.TOOLS
                     Page.TASKS -> Page.AI
@@ -310,7 +313,7 @@ class MainActivity : ComponentActivity() {
                         page == Page.LEGAL -> page = legalReturn
                         page == Page.ACCOUNT -> page = accountReturn
                         page == Page.ABOUT -> page = Page.PROFILE
-                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL) -> page = Page.PROFILE
+                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL, Page.PROFILE_EDIT) -> page = Page.PROFILE
                         page in setOf(Page.LOGS, Page.KNOWLEDGE, Page.TRAINING) -> page = Page.TOOLS
                         else -> page = appearance.startTab.page()
                     }
@@ -564,8 +567,11 @@ class MainActivity : ComponentActivity() {
                                         onBackup = { page = Page.BACKUP }, onModels = { openModels(false) },
                                         onHistory = openHistory, account = accountState.user,
                                         onAccount = { accountReturn = Page.PROFILE; page = Page.ACCOUNT },
+                                        profile = userProfileState.profile, onEditProfile = { page = Page.PROFILE_EDIT },
                                         onAbout = { page = Page.ABOUT }, modifier = modifier
                                     )
+                                    Page.PROFILE_EDIT -> com.example.waferai.ui.settings.UserProfileScreen(userProfileState, userProfileViewModel,
+                                        accountState.user?.name ?: "访客", goBack, modifier)
                                     Page.ACCOUNT -> AccountScreen(accountState, accountViewModel, goBack,
                                         onLegal = { legalReturn = Page.ACCOUNT; legalDocument = it; page = Page.LEGAL },
                                         modifier = modifier.consumeWindowInsets(insets))

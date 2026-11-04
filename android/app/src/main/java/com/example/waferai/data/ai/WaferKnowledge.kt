@@ -93,6 +93,11 @@ internal class WaferKnowledge(
 
     data class RefreshResult(val added: Int, val failures: List<String> = emptyList())
 
+    suspend fun lookupForChat(plugin: SearchPlugin, query: String): List<KnowledgeEntry> = withContext(Dispatchers.IO) {
+        check(plugins.state(plugin).enabled)
+        fetch(plugin, query.trim().take(200))
+    }
+
     suspend fun test(plugin: SearchPlugin, key: String? = null): Int = withContext(Dispatchers.IO) {
         fetch(plugin, plugin.testQuery, pluginKey(plugin, key) ?: plugins.key(plugin)).size
     }

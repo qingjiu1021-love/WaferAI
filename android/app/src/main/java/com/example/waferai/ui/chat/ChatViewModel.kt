@@ -21,6 +21,8 @@ import com.example.waferai.data.ai.ChatTurn
 import com.example.waferai.data.ai.DeepSeekClient
 import com.example.waferai.data.ai.LocalWaferAssistant
 import com.example.waferai.data.ai.WaferKnowledge
+import com.example.waferai.data.ai.ChatWebSearch
+import com.example.waferai.data.ai.ChatSearchResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,7 +39,11 @@ internal data class ChatUiState(
     val writing: Boolean = false,
     val error: String? = null,
     val attachment: ChatAttachment? = null,
-    val memory: String = ""
+    val memory: String = "",
+    val webSearch: Boolean = false,
+    val stage: String? = null,
+    val startedAt: Long = 0,
+    val searchNotice: String? = null
 ) {
     val turns get() = archive.active.turns
     val busy: Boolean get() = loading || writing || pending != null
@@ -48,9 +54,11 @@ internal class ChatViewModel(
     private val store: ChatStore,
     private val profiles: AiProfileStore,
     private val client: DeepSeekClient = DeepSeekClient(),
-    private val knowledge: WaferKnowledge? = null
+    private val knowledge: WaferKnowledge? = null,
+    private val web: ChatWebSearch = ChatWebSearch(knowledge)
 ) : AndroidViewModel(context.applicationContext as Application) {
     private val memoryStore = ChatMemoryStore(getApplication())
+    private val webPrefs = context.getSharedPreferences("chat_web_search", Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(ChatUiState())
     val state = mutable.asStateFlow()
     private var request: Job? = null
@@ -59,7 +67,7 @@ internal class ChatViewModel(
         viewModelScope.launch {
             try {
                 val (archive, memory) = withContext(Dispatchers.IO) { store.readArchive() to memoryStore.read() }
-                mutable.value = ChatUiState(archive = archive, memory = memory, loading = false)
+                mutable.value = ChatUiState(archive = archive, memory = memory, loading = false, webSearch = webPrefs.getBoolean("enabled", false))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -70,6 +78,13 @@ internal class ChatViewModel(
 
     fun edit(text: String) {
         if (!mutable.value.busy) mutable.value = mutable.value.copy(draft = text.take(2000), error = null)
+    }
+
+    fun toggleWebSearch() {
+        if (mutable.value.busy) return
+        val enabled = !mutable.value.webSearch
+        if (webPrefs.edit().putBoolean("enabled", enabled).commit()) mutable.value = mutable.value.copy(webSearch = enabled, error = null)
+        else mutable.value = mutable.value.copy(error = "无法保存联网搜索设置。")
     }
 
     fun attach(uri: Uri, photo: Boolean, capture: Boolean = false) {
@@ -131,10 +146,15 @@ internal class ChatViewModel(
         if (previous.busy || (previous.draft.isBlank() && attachment == null)) return
         val question = previous.draft.trim().ifBlank { if (english) "Explain this attachment." else "请解读这个附件。" }
         val memory = previous.memory.takeIf { rememberContext }.orEmpty()
-        mutable.value = previous.copy(pending = question, draft = "", error = null)
+        mutable.value = previous.copy(pending = question, draft = "", error = null, searchNotice = null, startedAt = System.currentTimeMillis(), stage = "准备请求")
         request = viewModelScope.launch {
             try {
                 var contextId: String? = null
+                val search = if (previous.webSearch) {
+                    mutable.value = mutable.value.copy(stage = "正在搜索网页资料")
+                    web.search(question)
+                } else ChatSearchResult(emptyList())
+                mutable.value = mutable.value.copy(searchNotice = search.notice, stage = if (profileId == null) "正在整理资料" else "等待模型思考与回复")
                 val (reply, model) = if (profileId == null) {
                     val localHistory = previous.turns.takeLastWhile { it.model == LocalWaferAssistant.Name }
                         .takeIf { rememberContext }.orEmpty()
@@ -157,9 +177,12 @@ internal class ChatViewModel(
                             append(it.take(900))
                         }
                     }.trim()
-                    val reply = if (references.isEmpty()) guidance else guidance +
+                    var reply = if (references.isEmpty()) guidance else guidance +
                         (if (english) "\n\nFrom the offline knowledge base\n" else "\n\n本地知识库\n") +
                         references.joinToString("\n\n") { "${it.title(english)}\n${it.body(english)}\n${it.source}" }
+                    if (previous.webSearch) reply = (if (search.sources.isEmpty()) search.notice.orEmpty() else
+                        "已检索到以下网页摘要。基础助手展示检索资料；需要综合分析时可选择在线模型。\n\n" +
+                        search.sources.mapIndexed { index, source -> "[${index + 1}] ${source.title}\n${source.snippet}" }.joinToString("\n\n"))
                     reply to LocalWaferAssistant.Name
                 } else {
                     val profile = withContext(Dispatchers.IO) { profiles.request(profileId) }
@@ -169,14 +192,15 @@ internal class ChatViewModel(
                     }
                     val history = previous.turns.takeLastWhile { it.profileId == contextId }
                         .takeIf { rememberContext }.orEmpty()
-                    client.chat(profile, ChatPrompt.messages(history, question, summary, memory, attachment, replyLanguage), thinking) to
+                    client.chat(profile, ChatPrompt.messages(history, question, summary, memory, attachment, replyLanguage,
+                        if (previous.webSearch) ChatWebSearch.context(search) else ""), thinking) to
                         "${profile.profile.provider.title} · ${profile.profile.model}"
                 }
-                val updated = (previous.turns + ChatTurn(question, reply, model, summary, contextId, attachment?.name)).takeLast(30)
-                mutable.value = mutable.value.copy(writing = true)
+                val updated = (previous.turns + ChatTurn(question, reply, model, summary, contextId, attachment?.name, search.sources, search.notice)).takeLast(30)
+                mutable.value = mutable.value.copy(writing = true, stage = "正在保存回答")
                 val archive = previous.archive.updateActive(updated)
                 withContext(Dispatchers.IO) { store.writeArchive(archive) }
-                mutable.value = ChatUiState(archive = archive, loading = false, memory = previous.memory)
+                mutable.value = ChatUiState(archive = archive, loading = false, memory = previous.memory, webSearch = previous.webSearch)
             } catch (cancelled: CancellationException) {
                 mutable.value = previous.copy(error = "已停止等待回复。")
                 throw cancelled
@@ -227,7 +251,7 @@ internal class ChatViewModel(
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { store.writeArchive(next) }
-                mutable.value = ChatUiState(archive = next, loading = false, memory = previous.memory)
+                mutable.value = ChatUiState(archive = next, loading = false, memory = previous.memory, webSearch = previous.webSearch)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

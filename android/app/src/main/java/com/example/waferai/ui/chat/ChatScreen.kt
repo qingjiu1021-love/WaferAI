@@ -59,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -135,6 +137,15 @@ internal fun ChatScreen(
     val list = rememberLazyListState()
     val focus = LocalFocusManager.current
     val scheme = MaterialTheme.colorScheme
+    val uriHandler = LocalUriHandler.current
+    var sourceError by remember { mutableStateOf<String?>(null) }
+    var elapsed by remember { mutableStateOf(0L) }
+    LaunchedEffect(state.startedAt, state.pending) {
+        if (state.pending != null) while (true) {
+            elapsed = ((System.currentTimeMillis() - state.startedAt) / 1000).coerceAtLeast(0)
+            delay(1000)
+        }
+    }
     val showIntro = state.turns.isEmpty() && state.pending == null
     val disclosure = if (model == null) "基础助手提供本机规则问答与知识检索。自由对话请在模型选择中添加在线 AI。"
         else "发送时，消息与附件将交给当前 AI 服务处理，可能产生 API 费用。"
@@ -227,6 +238,15 @@ internal fun ChatScreen(
                         ChatBubble(if (turn.waferSummary == null) "我" else "我 · 已附晶圆摘要",
                             turn.question + turn.attachmentName?.let { "\n附件：$it" }.orEmpty(), user = true)
                         ChatBubble(turn.model, turn.reply, user = false)
+                        turn.searchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant) }
+                        if (!turn.sources.isNullOrEmpty()) StudioPanel(Modifier.fillMaxWidth()) {
+                            Text("联网来源 · 网页摘要", style = MaterialTheme.typography.labelLarge)
+                            turn.sources.orEmpty().forEachIndexed { index, source ->
+                                TextButton({ runCatching { uriHandler.openUri(source.url) }.onFailure { sourceError = "无法打开来源链接。" } }) {
+                                    Text("[${index + 1}] ${source.title}", maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
                     }
                 }
                 state.pending?.let { question ->
@@ -239,6 +259,7 @@ internal fun ChatScreen(
                     TextButton({ onEditModel(model.id) }, enabled = !profileBusy && !state.busy) { Text("检查当前模型") }
                 }
             }
+            sourceError?.let { Text(it, color = scheme.error, style = MaterialTheme.typography.bodySmall) }
             if (state.attachment != null || (attach && wafer != null)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     val label = listOfNotNull(state.attachment?.name,
@@ -251,12 +272,21 @@ internal fun ChatScreen(
                 }
             }
             if (state.busy) {
+                state.stage?.let { Text("$it · 已用 ${elapsed} 秒", style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
                 LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (state.stage == "等待模型思考与回复") Text("当前接口未提供思考百分比，显示实际等待时间。", style = MaterialTheme.typography.bodySmall)
+                state.searchNotice?.let { Text(it, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                 if (state.pending != null && !state.writing) TextButton(viewModel::cancel) { Text("停止等待") }
             }
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = scheme.surfaceContainer,
                 border = BorderStroke(1.dp, scheme.outlineVariant)) {
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.FilterChip(selected = state.webSearch, onClick = viewModel::toggleWebSearch,
+                            enabled = !state.busy, label = { Text(if (state.webSearch) "联网搜索已开启" else "联网搜索") },
+                            leadingIcon = { StudioGlyph(StudioIcon.LANGUAGE, Modifier.size(16.dp), scheme.primary) })
+                    }
+                    if (state.webSearch) Text("发送后将用本次问题检索网页；附件与记忆不会交给搜索服务。", Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall)
                     TextField(state.draft, viewModel::edit, modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("输入问题") }, maxLines = 4, enabled = !state.busy,
                         colors = TextFieldDefaults.colors(
