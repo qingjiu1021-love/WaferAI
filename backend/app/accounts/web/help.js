@@ -1,0 +1,4 @@
+'use strict';
+const search=document.getElementById('search');search.oninput=()=>{const q=search.value.trim().toLocaleLowerCase();let count=0;for(const item of document.querySelectorAll('details')){item.hidden=!item.textContent.toLocaleLowerCase().includes(q);if(!item.hidden)count++}document.getElementById('empty').hidden=count>0};
+document.getElementById('logout').onclick=async()=>{try{await fetch('/api/v1/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});location.replace('/account')}catch{alert('暂时无法退出，请检查网络。')}};
+fetch('/api/v1/auth/me',{cache:'no-store'}).then(async r=>{if(!r.ok){location.replace('/account');return}const u=await r.json();document.getElementById('user').textContent=u.name}).catch(()=>{document.getElementById('user').textContent='连接暂时中断'});

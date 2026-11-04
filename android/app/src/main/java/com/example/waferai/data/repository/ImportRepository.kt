@@ -1,0 +1,198 @@
+package com.example.waferai.data.repository
+
+import android.content.Context
+import com.example.waferai.data.ai.readableReply
+import android.net.Uri
+import android.provider.OpenableColumns
+import com.example.waferai.data.remote.*
+import com.example.waferai.data.ai.AnalysisEvidence
+import com.example.waferai.data.ai.DeepSeekClient
+import com.example.waferai.data.ai.AiProfileStore
+import com.example.waferai.data.local.LocalWaferStore
+import com.example.waferai.data.local.LogOperation
+import com.example.waferai.data.local.OperationLog
+import com.example.waferai.data.local.WaferImage
+import com.example.waferai.data.local.WaferImageOptions
+import com.example.waferai.data.local.WaferParquet
+import com.example.waferai.data.local.WaferTestData
+import com.example.waferai.data.local.DemoWafer
+import com.example.waferai.data.local.MobilePredictor
+import com.example.waferai.data.local.WaferJson
+import com.example.waferai.data.local.WaferOrder
+import com.example.waferai.data.local.WaferCsvQuery
+import com.example.waferai.data.local.WaferYieldBand
+import com.example.waferai.data.local.WaferTrainer
+import com.example.waferai.data.report.ReportSnapshot
+import com.example.waferai.data.report.WaferPdfReport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.File
+import java.io.FilterInputStream
+import java.io.InputStream
+
+class ImportRepository(private val context: Context) {
+    private val resolver = context.contentResolver
+    val store = LocalWaferStore(context)
+    internal val operationLog = OperationLog(context)
+    val predictor = MobilePredictor(context)
+    val aiProfiles = AiProfileStore(context)
+    private val aiClient = DeepSeekClient()
+    private val trainer = WaferTrainer(context)
+    val trainingSummary = trainer.summary
+
+    internal suspend fun trainModel(uri: Uri?) = logged(LogOperation.TRAIN) {
+        val custom = uri?.let { readFile(it, WaferJson.MAX_BYTES) }
+        withContext(Dispatchers.Default) { trainer.train(custom) }
+    }
+
+    internal suspend fun inspectWafer(id: Int, threshold: Int, trained: Boolean) = logged(LogOperation.CLASSIFY) {
+        val wafer = store.detail(id)
+        val cached = if (trained) null else store.prediction(id, predictor.modelHash)
+        val prediction = cached ?: withContext(Dispatchers.Default) {
+            if (trained) trainer.predict(wafer) else predictor.predict(wafer)
+        }
+        store.saveInspection(prediction, threshold)
+    }
+
+    internal suspend fun latestInspection(waferId: Int) = withContext(Dispatchers.IO) { store.latestInspection(waferId) }
+    internal suspend fun recentInspections() = withContext(Dispatchers.IO) { store.recentInspections() }
+
+    suspend fun latestPrediction(waferId: Int) = withContext(Dispatchers.IO) { store.prediction(waferId) ?: error("这张晶圆尚未识别。") }
+
+    suspend fun listWafers(
+        limit: Int, offset: Int, lotId: Int? = null, query: String = "",
+        order: WaferOrder = WaferOrder.RECENT, belowPercent: Int? = null,
+        yieldBand: WaferYieldBand? = null
+    ) = withContext(Dispatchers.IO) { store.listWafers(limit, offset, lotId, query, order, belowPercent, yieldBand) }
+
+    suspend fun overview() = withContext(Dispatchers.IO) { store.overview() }
+
+    suspend fun exportBackup(uri: Uri): Int = withContext(Dispatchers.IO) {
+        val staging = File.createTempFile("wafer-backup-", ".json", context.cacheDir)
+        try {
+            val count = staging.bufferedWriter(Charsets.UTF_8).use { store.backup(it) { ensureActive() } }
+            require(staging.length() <= BackupSizeLimit)
+            val target = resolver.openOutputStream(uri, "wt") ?: throw IOException("无法打开备份位置。")
+            target.use { output -> staging.inputStream().use { it.copyTo(output) } }
+            count
+        } finally {
+            staging.delete()
+        }
+    }
+
+    suspend fun restoreBackup(uri: Uri): Int = withContext(Dispatchers.IO) {
+        val source = resolver.openInputStream(uri) ?: throw IOException("无法打开备份文件。")
+        BoundedBackupInput(source).bufferedReader(Charsets.UTF_8).use { store.restoreBackup(it) { ensureActive() } }
+    }
+
+    suspend fun exportCsv(uri: Uri, query: WaferCsvQuery): Int = withContext(Dispatchers.IO) {
+        val stream = resolver.openOutputStream(uri, "wt") ?: throw IOException("无法写入所选位置。")
+        stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            store.writeWafersCsv(writer, query) { ensureActive() }
+        }
+    }
+
+    suspend fun waferDetail(waferId: Int) = withContext(Dispatchers.IO) { store.detail(waferId) }
+
+    suspend fun listLots(limit: Int, offset: Int) = withContext(Dispatchers.IO) { store.listLots(limit, offset) }
+
+    suspend fun lotDetail(lotId: Int) = withContext(Dispatchers.IO) { store.lotDetail(lotId) }
+
+    suspend fun latestAnalysis(waferId: Int,predictionId: Int) = withContext(Dispatchers.IO) { store.latestAnalysis(waferId,predictionId) }
+    suspend fun analyze(wafer: WaferDetail,prediction: WaferPrediction): com.example.waferai.data.local.AiAnalysis {
+        val request = withContext(Dispatchers.IO) { aiProfiles.request() }
+        val profile = request.profile
+        val evidence=withContext(Dispatchers.Default) { AnalysisEvidence.create(wafer,prediction) }
+        val text = readableReply(aiClient.analyze(request.key, profile.model, evidence, profile.endpoint, profile.provider, profile.protocol))
+        return withContext(Dispatchers.IO) {
+            store.saveAnalysis(wafer.id, prediction.id, "${profile.provider.title} · ${profile.model}", text)
+        }
+    }
+    suspend fun loadDemo(sample: DemoWafer) = withContext(Dispatchers.IO) {
+        val bytes = context.assets.open("samples/${sample.filename}").use { it.readBytes() }
+        store.importJson(bytes, sample.filename)
+    }
+
+    suspend fun exportPdf(uri: Uri, snapshot: ReportSnapshot) = logged(LogOperation.REPORT) {
+        val bytes = WaferPdfReport(snapshot).generate()
+        resolver.openOutputStream(uri, "w")?.use { it.write(bytes) }
+            ?: throw IOException("无法写入所选位置。")
+    }
+
+    suspend fun importFile(uri: Uri): ImportResponse = logged(LogOperation.IMPORT) {
+        val name = displayName(uri) ?: "wafer.json"
+        val format = name.substringAfterLast('.').lowercase()
+        val limit = when (format) {
+            "json", "csv", "cvs" -> WaferJson.MAX_BYTES
+            "stdf", "std", "atdf", "adtf", "parquet" -> WaferTestData.MAX_BYTES
+            else -> throw IllegalArgumentException("请选择 STDF、ATDF、CSV、JSON 或 Parquet 晶圆数据。")
+        }
+        val bytes = readFile(uri, limit)
+        when (format) {
+            "csv", "cvs" -> store.importCsv(bytes, name)
+            "stdf", "std" -> store.saveParsed(WaferTestData.stdf(bytes, name))
+            "atdf", "adtf" -> store.saveParsed(WaferTestData.atdf(bytes, name))
+            "parquet" -> store.saveParsed(WaferParquet.parse(context, bytes, name))
+            else -> store.importJson(bytes, name)
+        }
+    }
+
+    suspend fun importImage(uri: Uri, options: WaferImageOptions): ImportResponse = logged(LogOperation.IMAGE) {
+        val name = displayName(uri) ?: "wafer.png"
+        require(WaferImage.supports(name) || resolver.getType(uri)?.startsWith("image/") == true) {
+            "请选择设备支持的晶圆图片。"
+        }
+        val bytes = readFile(uri, WaferImage.MAX_BYTES)
+        store.saveParsed(WaferImage.parse(bytes, name, options))
+    }
+
+    private fun displayName(uri: Uri): String? =
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                }
+
+    private fun readFile(uri: Uri, limit: Int): ByteArray = resolver.openInputStream(uri)?.use { input ->
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            require(output.size() + count <= limit) { "文件不能超过 ${limit / (1024 * 1024)} MB。" }
+            output.write(buffer, 0, count)
+        }
+        output.toByteArray()
+    } ?: throw IOException("无法打开文件，请重新选择。")
+
+    private suspend fun <T> logged(operation: LogOperation, block: suspend () -> T): T = withContext(Dispatchers.IO) {
+        try {
+            block().also { operationLog.record(operation, true) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            operationLog.record(operation, false)
+            throw error
+        }
+    }
+}
+
+private const val BackupSizeLimit = 128L * 1024 * 1024
+
+private class BoundedBackupInput(input: InputStream) : FilterInputStream(input) {
+    private var count = 0L
+
+    override fun read(): Int = super.read().also { if (it >= 0) add(1) }
+
+    override fun read(bytes: ByteArray, offset: Int, length: Int): Int =
+        super.read(bytes, offset, length).also { if (it > 0) add(it) }
+
+    private fun add(bytes: Int) {
+        count += bytes
+        require(count <= BackupSizeLimit)
+    }
+}

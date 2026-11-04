@@ -1,0 +1,25 @@
+name: Android checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Compile and check
+        working-directory: android
+        run: bash gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
+      # Public updates are uploaded by scripts/publish_github.py using the existing
+      # local signing key. A fresh CI debug key cannot update already-installed APKs.

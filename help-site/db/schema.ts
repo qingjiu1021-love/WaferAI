@@ -1,0 +1,8 @@
+import { sqliteTable, text, integer, primaryKey, index } from "drizzle-orm/sqlite-core";
+export const users = sqliteTable("users", { id: text().primaryKey(), name: text().notNull(), created_at: integer().notNull(), policy: text().notNull() });
+export const identities = sqliteTable("identities", { kind: text().notNull(), subject: text().notNull(), user_id: text().notNull().references(() => users.id, {onDelete:"cascade"}), password: text() }, t => [primaryKey({columns:[t.kind,t.subject]}), index("identity_user").on(t.user_id)]);
+export const sessions = sqliteTable("sessions", { hash: text().primaryKey(), user_id: text().notNull().references(() => users.id, {onDelete:"cascade"}), expires: integer().notNull() }, t => [index("session_expiry").on(t.expires)]);
+export const codes = sqliteTable("codes", { target: text().notNull(), purpose: text().notNull(), hash: text().notNull(), expires: integer().notNull(), attempts: integer().notNull().default(0) }, t => [primaryKey({columns:[t.target,t.purpose]})]);
+export const limits = sqliteTable("limits", { key: text().primaryKey(), started: integer().notNull(), count: integer().notNull() });
+export const flows = sqliteTable("flows", { state: text().primaryKey(), poll_hash: text().notNull().unique(), provider: text().notNull(), verifier: text().notNull(), nonce: text().notNull(), expires: integer().notNull(), user_id: text().references(() => users.id, {onDelete:"cascade"}), status: text().notNull().default("pending"), message: text().notNull().default("") });
+export const tickets = sqliteTable("tickets", { hash: text().primaryKey(), user_id: text().notNull().references(() => users.id, {onDelete:"cascade"}), expires: integer().notNull() });

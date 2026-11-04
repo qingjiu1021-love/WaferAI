@@ -1,0 +1,93 @@
+{
+  "model_version": "cnn-v1-mobile",
+  "source_checkpoint_sha256": "8bf91dab52a648d1c1c66158d7d03835b312dd07bea918ace00f6f457f5f382d",
+  "model_sha256": "b46149e5fd1eda4c02e67c980766ceaffccac66534b24855997c38ea217e84ff",
+  "classes": [
+    "none",
+    "Center",
+    "Donut",
+    "Edge-Loc",
+    "Edge-Ring",
+    "Loc",
+    "Random",
+    "Scratch",
+    "Near-full"
+  ],
+  "preprocessing_id": "nearest_pixel_center_aspect_pad64_v1",
+  "opset": 17,
+  "runtime": "onnxruntime-1.23.2",
+  "conversion_checks": 11,
+  "maximum_probability_error": 4.6938657760620117e-07,
+  "original_test_metrics": {
+    "samples": 24219,
+    "accuracy": 0.9684545191791568,
+    "macro_f1": 0.8344997140616158,
+    "balanced_accuracy": 0.8482776737762688,
+    "per_class": [
+      {
+        "class": "none",
+        "precision": 0.9889659212967483,
+        "recall": 0.9847350510452114,
+        "f1": 0.9868459514761765,
+        "support": 20570
+      },
+      {
+        "class": "Center",
+        "precision": 0.8978978978978979,
+        "recall": 0.9417322834645669,
+        "f1": 0.919292851652575,
+        "support": 635
+      },
+      {
+        "class": "Donut",
+        "precision": 0.9655172413793104,
+        "recall": 0.6021505376344086,
+        "f1": 0.7417218543046358,
+        "support": 93
+      },
+      {
+        "class": "Edge-Loc",
+        "precision": 0.7700348432055749,
+        "recall": 0.861038961038961,
+        "f1": 0.8129981606376456,
+        "support": 770
+      },
+      {
+        "class": "Edge-Ring",
+        "precision": 0.976061776061776,
+        "recall": 0.9693251533742331,
+        "f1": 0.972681800692574,
+        "support": 1304
+      },
+      {
+        "class": "Loc",
+        "precision": 0.7319148936170212,
+        "recall": 0.6785009861932939,
+        "f1": 0.7041965199590583,
+        "support": 507
+      },
+      {
+        "class": "Random",
+        "precision": 0.9692307692307692,
+        "recall": 0.8513513513513513,
+        "f1": 0.9064748201438849,
+        "support": 148
+      },
+      {
+        "class": "Scratch",
+        "precision": 0.5608695652173913,
+        "recall": 0.7456647398843931,
+        "f1": 0.640198511166253,
+        "support": 173
+      },
+      {
+        "class": "Near-full",
+        "precision": 0.7037037037037037,
+        "recall": 1.0,
+        "f1": 0.8260869565217391,
+        "support": 19
+      }
+    ],
+    "loss": 0.1027435712315423
+  }
+}

@@ -1,0 +1,4 @@
+# Additional tools for exporting the existing frozen PyTorch model.
+onnx==1.19.1
+onnxruntime==1.23.2
+numpy==1.26.4

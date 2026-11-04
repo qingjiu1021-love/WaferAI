@@ -1,0 +1,97 @@
+# WaferAI 4.3.0
+
+Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 34。
+
+[下载安装包](https://github.com/qingjiu1021-love/WaferAI/releases/latest) · [账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)
+
+支持 Android 8.0 及以上的 arm64-v8a / x86_64。手机本地晶圆分析无需电脑服务，测试包沿用此前签名，可直接覆盖安装，无需先卸载。
+
+## 当前版本
+
+- 晶圆、数据、AI、工具、我的五个页面；本地导入、晶圆图、良率、CNN 识别、历史与 PDF 报告。
+- AI 支持自由对话、多供应商与自定义模型，在线服务使用用户自己的 API 配置。
+- 账号支持添加、切换和移除已登录账号；切换时联网检查会话，会话在本机加密保存。
+- 支持验证码绑定手机号或邮箱，绑定需在登录后 15 分钟内完成。新联系方式使用单独设置的密码，已有登录方式的密码不变，不自动合并其他账号。
+- “我的 → 关于”提供版本检查、GitHub 项目入口和安装包下载。我的页面底部移除重复的名称与版本。
+
+ChatGPT 托管授权入口已部署。真实邮件、短信、微信、QQ、Facebook、Telegram 仍需维护者申请并配置对应服务；未开通时不会伪造成功。本机晶圆、聊天与模型设置由设备共用，不随账号同步，也没有跨账号隔离。
+
+## 开发与后续发布
+
+Android Studio 打开 android 目录，使用 JDK 17、Android SDK 36 / Build Tools 36.0.0。Gradle Wrapper 和依赖版本由项目固定。在 android 目录执行：
+
+```powershell
+.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --console=plain
+```
+
+后续修改 versionName 和 versionCode，新增 docs/releases/版本号.md，再在原开发电脑运行“发布更新到GitHub.bat”。脚本完成检查、源码同步和 APK 发布；App 从同一仓库检查更新。GitHub Actions 在 main 提交后自动执行 Android 编译与检查，正式包由本机稳定签名后上传，避免 CI 临时签名无法覆盖旧版。详见 [GitHub 发布说明](docs/GitHub发布与更新.md)。
+
+目录：android 为手机端；backend 为训练与 FastAPI/账号原型；help-site 为托管账号和帮助网页；scripts 为发布工具；docs 为实验和配置说明。
+
+原始 WM-811K、完整加工数据、训练运行产物、账号数据库、密钥和签名私钥不上传。内置模型与演示子集来源见 assets/models；许可范围见 [NOTICE](NOTICE.md)。真实手机、第三方授权和付费模型需要使用者自己的设备和配置验收。当前为毕业设计测试版。
+
+<details>
+<summary>历史版本设计与验证记录（2.0–4.2，版号和测试数量仅对应当时）</summary>
+
+4.2.0 已部署 [在线账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)，帮助内容由服务端要求登录，提供 ChatGPT 托管授权入口。四个原有第三方平台的真实凭据仍待维护者配置。Android 默认使用在线服务，并支持授权中断恢复、重试与取消，见 [账号与帮助中心接入说明](docs/账号与帮助中心接入说明.md)。
+
+4.1.0 新增账号注册登录、找回密码、“我的 → 关于”和需登录的帮助中心网页。在线 AI 支持自由话题。账号服务为可配置的独立后端，本机晶圆分析仍无需登录或联网；测试方式、各平台接入条件和政策草案范围见 [账号与帮助中心接入说明](docs/账号与帮助中心接入说明.md)。后续内容保留独立版基础设计说明。
+
+毕业设计题目：基于 Android 的集成电路晶圆缺陷智能识别与良率分析系统设计与实现。
+
+当前 Android 版本已改为手机独立运行：JSON 导入、晶圆图、良率、CNN 分类、历史记录、批次汇总和 PDF 报告全部在本机完成，不需要电脑服务。DeepSeek 在线解析是可选功能，需要手机联网和用户自己的 API 密钥。
+
+## 使用
+
+1. 安装独立版 APK；支持 64 位 Android 8.0 及以上（arm64-v8a / x86_64）。
+2. 点击“载入演示晶圆”或选择自己的 JSON，点击“识别缺陷类型”。内置示例良率为 85.71%。
+3. 历史、批次和导出均使用手机数据。旧电脑记录需要通过对应 JSON 重新导入，电脑原数据不会被删除。
+4. 如需在线解析，在“AI 设置”中填写 DeepSeek API 密钥并保存，然后在已识别晶圆下点击“DeepSeek 解析（联网）”。每次请求由用户主动触发，可能产生 API 费用。
+5. 保存过的解析可离线查看，并随 PDF 导出；密钥使用 Android Keystore 加密，不写入安装包或报告。
+
+完整安装、配置、手机数据库和验证范围见 [独立运行版与 DeepSeek 解析](docs/独立运行版与DeepSeek解析.md)。当前电脑也可运行项目根目录“安装独立版到手机.bat”，安装完成后即可拔掉 USB。
+
+## 开发和验证
+
+- Android Studio Otter 2025.2.1 Patch 1；JDK 17，Gradle 8.13，AGP 8.13.2，Kotlin 2.0.21，Compose BOM 2024.09.00。
+- 本地 SQLiteOpenHelper；ONNX Runtime Android 1.23.2；手机 CPU FP32 推理，无需下载模型。
+- 已冻结 cnn-v1 转为 626,662 字节 ONNX。11 组转换一致性检查及 Android 对照通过；不把转换检查当成新的全测试集性能指标。
+- 16 项 JVM 检查、7 项 Android 端侧测试通过。电脑后台停止后已在模拟器实测真实晶圆导入、识别、重启恢复、批次和 PDF。
+- 用户选择先交付安装包，真实手机验收留待之后；没有用户真实密钥，DeepSeek 的实际付费调用尚未测试，接口流程使用明确标注的模拟响应验证。
+
+Windows 在 android 目录构建：
+
+```powershell
+$env:JAVA_HOME = 'D:\OpenJDK17U'
+.\gradlew.bat --console=plain --max-workers=1 testDebugUnitTest assembleDebug
+```
+
+APK：android/app/build/outputs/apk/debug/app-debug.apk，演示 debug 签名，versionName 2.0 / versionCode 3。
+
+## 主要代码
+
+```text
+android/app/src/main/
+  assets/models/                 冻结 ONNX 与模型元信息
+  assets/samples/                手工构造示例
+  assets/licenses/               ONNX Runtime 与第三方声明
+  java/com/example/waferai/
+    data/local/                  校验、SQLite、本地 CNN
+    data/ai/                     加密配置、汇总证据、DeepSeek 请求
+    data/repository/             本地业务数据入口
+    data/report/                 原生 PDF 与长解析分页
+    ui/importdata/               导入、图形、识别及解析
+    ui/history/                  本地记录
+    ui/lots/                     本地批次汇总
+    ui/settings/AiSettings*      DeepSeek 配置
+backend/
+  scripts/export_mobile_model.py 冻结模型导出与转换核对
+  scripts/install_standalone.py  可选 USB 安装工具
+  app/ml/                       原训练、预处理与评估代码
+```
+
+Python 训练与转换环境位于 backend/.venv，仅开发电脑需要。App 运行不依赖 Python 或 FastAPI。旧 FastAPI 原型及 1.1 启动说明保留在 [旧版电脑服务说明](docs/旧版电脑服务说明-1.1.md)，不作为 2.0 的启动步骤。
+
+WM-811K 的许可、标签与按批次划分见 [训练数据准备](docs/WM811K训练数据准备.md)；既有独立测试报告及薄弱类别说明保持不变。旧版 Android 服务连接相关代码保留作历史参考，当前入口和业务 Repository 已切换为本地实现。
+
+</details>

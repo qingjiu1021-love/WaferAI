@@ -1,0 +1,2 @@
+-r requirements-api.txt
+pandas==2.2.3

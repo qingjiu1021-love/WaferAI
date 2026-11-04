@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.WaferAI" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.WaferAI.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/wafer_splash_navy</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/wafer_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.WaferAI</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/wafer_splash_navy</item>
+        <item name="android:navigationBarColor">@color/wafer_splash_navy</item>
+    </style>
+</resources>
