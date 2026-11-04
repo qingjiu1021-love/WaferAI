@@ -16,8 +16,8 @@ android {
         minSdk = 26
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
-        versionCode = 36
-        versionName = "4.5.0"
+        versionCode = 37
+        versionName = "4.6.0"
         buildConfigField("String", "ACCOUNT_BASE_URL", "\"https://waferai-help.sparsefirefly.chatgpt.site\"")
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/\"")
 

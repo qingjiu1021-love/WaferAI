@@ -62,7 +62,7 @@ internal val BuiltInKnowledge = listOf(
         listOf("stdf", "atdf", "prr", "parquet", "csv", "坐标", "导入", "电测"),
         "STDF, ATDF and coordinate import",
         "STDF stores binary test records and ATDF is a text interchange format. WaferAI uses valid PRR coordinates and pass/fail flags. CSV and Parquet use lot_code, wafer_code, row, col and status.")
-)
+) + WafertoolsKnowledge
 
 internal class WaferKnowledge(
     context: Context,

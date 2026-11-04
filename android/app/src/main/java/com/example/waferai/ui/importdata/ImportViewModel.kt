@@ -53,7 +53,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 val result=repository.loadDemo(sample)
-                mutableState.value=ImportUiState(wafer=result.wafer,notice="已载入手工构造的演示晶圆，数据保存在本机。")
+                mutableState.value=ImportUiState(wafer=result.wafer,notice=if (sample.isReal) "已载入真实样本：${sample.title}，原始标注 ${sample.datasetLabel}。该标注不是本次 AI 预测，数据已保存在本机。" else "已载入手工构造的演示晶圆，数据保存在本机。")
                 restorePrediction(result.wafer.id)
             } catch(cancelled: CancellationException) { throw cancelled }
             catch(error: Exception) { mutableState.value=ImportUiState(error=error.message ?: "无法载入演示晶圆。") }

@@ -91,34 +91,11 @@ fun WaferHomeScreen(
     var panel by rememberSaveable(importState.wafer?.id) { mutableStateOf(WaferPanel.MAP) }
     val scroll = rememberScrollState()
     LaunchedEffect(panel, importState.wafer?.id) { scroll.scrollTo(0) }
-    if (showDemoPicker) {
-        AlertDialog(
-            onDismissRequest = { showDemoPicker = false },
-            title = { Text("选择演示晶圆") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("这些样本为人工构造，用于演示晶圆图和分析流程。")
-                    DemoWafer.entries.forEach { sample ->
-                        TextButton(
-                            onClick = {
-                                showDemoPicker = false
-                                onLoadDemo(sample)
-                            },
-                            enabled = !busy,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(sample.title, style = MaterialTheme.typography.titleSmall)
-                                Text(sample.description, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ showDemoPicker = false }) { Text("关闭") } }
-        )
-    }
+    if (showDemoPicker) DemoWaferPicker(busy, onSelect = { sample ->
+        showDemoPicker = false
+        onLoadDemo(sample)
+    }, onDismiss = { showDemoPicker = false })
+
     Column(
         modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -326,7 +303,7 @@ private fun WorkspaceIntro(onImport: () -> Unit, onImage: () -> Unit, onDemo: ()
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ActionTile("识别晶圆图片", "选择图片并校准网格", StudioIcon.PHOTO, onImage, Modifier.weight(1f), enabled)
-        ActionTile("载入演示晶圆", "体验缺陷与良率分析", StudioIcon.WAFER, onDemo, Modifier.weight(1f), enabled)
+        ActionTile("载入演示晶圆", "27 张真实样本与 3 张人工演示", StudioIcon.WAFER, onDemo, Modifier.weight(1f), enabled)
     }
     TextButton({ showHelp = true }) { Text("查看导入说明") }
 }

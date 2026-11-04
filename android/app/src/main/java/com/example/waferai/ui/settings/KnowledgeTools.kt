@@ -156,7 +156,7 @@ internal fun KnowledgeScreen(
                 label = { Text("搜索知识或输入联网检索词") }, singleLine = true)
             if (entries.isEmpty()) Text("没有找到相关知识。")
         }
-        items(entries, key = { it.source }) { entry ->
+        items(entries, key = { it.source + "\n" + it.title }) { entry ->
             StudioPanel(Modifier.fillMaxWidth()) {
                 androidx.compose.material3.Text(entry.title(english), style = MaterialTheme.typography.titleMedium)
                 if (entry.body(english).isNotBlank()) {

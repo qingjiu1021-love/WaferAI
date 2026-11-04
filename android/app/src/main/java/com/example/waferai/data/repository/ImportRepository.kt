@@ -112,7 +112,7 @@ class ImportRepository(private val context: Context) {
             store.saveAnalysis(wafer.id, prediction.id, "${profile.provider.title} · ${profile.model}", text)
         }
     }
-    suspend fun loadDemo(sample: DemoWafer) = withContext(Dispatchers.IO) {
+    suspend fun loadDemo(sample: DemoWafer) = logged(LogOperation.IMPORT) {
         val bytes = context.assets.open("samples/${sample.filename}").use { it.readBytes() }
         store.importJson(bytes, sample.filename)
     }

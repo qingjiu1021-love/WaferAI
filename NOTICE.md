@@ -6,3 +6,5 @@
 - 内置 CNN 及手机训练演示属于教学研究用途，不能替代实际产线测试或直接用于工艺放行。
 - Python、Android、ONNX Runtime、Parquet 读取库、网站模板等第三方组件保留原有许可声明。
 - GitHub 发布的是毕业设计测试包，沿用本机测试签名；正式商用或应用商店发行应单独规划正式签名、审核后的政策与服务配置。
+
+- 4.6.0 内置的 27 张真实演示样本参考 wafertools/wafermap 固定版本，来源、映射规则和数据集许可边界见 docs/wafertools真实演示样本.md；随包保留 Paul Robins 的 MIT 声明。
