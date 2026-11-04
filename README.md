@@ -1,6 +1,6 @@
 # WaferAI 4.5.0
 
-Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 35。
+Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 36。
 
 [下载安装包](https://github.com/qingjiu1021-love/WaferAI/releases/latest) · [账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)
 
