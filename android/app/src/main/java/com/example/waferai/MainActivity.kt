@@ -1,5 +1,10 @@
 package com.example.waferai
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.heightIn
+
 import android.os.Bundle
 import com.example.waferai.ui.account.AccountViewModel
 import com.example.waferai.ui.account.AccountScreen
@@ -53,6 +58,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -132,35 +139,37 @@ private val tabEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 private fun WaferBottomBar(appearance: Appearance, selectedTab: Page, onSelect: (Page) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val floating = appearance.bottomBar == BottomBarStyle.FLOATING
+    val shape = RoundedCornerShape(50)
     val modifier = if (floating) {
         Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
-            .padding(horizontal = 16.dp, vertical = 7.dp).height(68.dp)
-            .glassSurface(
-                scheme.surfaceContainer, scheme.primary, RoundedCornerShape(50),
-                appearance.glass, scheme.surface.luminance() < 0.4f, appearance.navOpacity / 100f
-            )
-    } else Modifier.fillMaxWidth()
-    NavigationBar(
-        modifier = modifier,
-        containerColor = if (floating) Color.Transparent else scheme.surfaceContainer,
-        windowInsets = if (floating) WindowInsets(0, 0, 0, 0) else NavigationBarDefaults.windowInsets
+            .padding(horizontal = 18.dp, vertical = 8.dp)
+            .glassSurface(scheme.surfaceContainer, scheme.primary, shape,
+                appearance.glass, scheme.surface.luminance() < 0.4f, appearance.navOpacity / 100f)
+    } else Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
+        .background(scheme.surfaceContainer)
+    androidx.compose.foundation.layout.Row(
+        modifier.heightIn(min = 68.dp).padding(horizontal = 5.dp, vertical = 4.dp).selectableGroup(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         tabs.forEachIndexed { index, (destination, label) ->
             val selected = selectedTab == destination
             val foreground = if (selected) scheme.primary else scheme.onSurfaceVariant
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onSelect(destination) },
-                icon = { TabIcon(index, foreground) },
-                label = { Text(label, maxLines = 1) },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = scheme.primary.copy(alpha = if (floating) 0.17f else 0.22f),
-                    selectedIconColor = scheme.primary,
-                    selectedTextColor = scheme.primary,
-                    unselectedIconColor = scheme.onSurfaceVariant,
-                    unselectedTextColor = scheme.onSurfaceVariant
-                )
-            )
+            val pill by androidx.compose.animation.animateColorAsState(
+                if (selected) scheme.primary.copy(alpha = 0.13f) else Color.Transparent,
+                animationSpec = tween(150), label = "navigation selection")
+            androidx.compose.foundation.layout.Column(
+                Modifier.weight(1f).clip(shape).background(pill)
+                    .selectable(selected, role = androidx.compose.ui.semantics.Role.Tab, onClick = { onSelect(destination) })
+                    .heightIn(min = 58.dp).padding(horizontal = 3.dp, vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+            ) {
+                TabIcon(index, foreground)
+                Text(label, maxLines = 1, color = foreground,
+                    style = scheme.let { androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium) })
+            }
         }
     }
 }

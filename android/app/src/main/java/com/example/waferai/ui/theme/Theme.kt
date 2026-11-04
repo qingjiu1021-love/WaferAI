@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -56,52 +57,53 @@ fun WaferAITheme(
         PaletteStyle.SOFT -> 0.70f
         PaletteStyle.NEUTRAL -> 0.35f
     }
-    val primary = if (dark) lerp(styledSeed, Color.White, 0.58f) else lerp(styledSeed, Color.Black, 0.61f)
+    val primary = readableAccent(styledSeed, dark)
+    val onAccent = if (primary.luminance() > 0.179f) Color(0xFF111114) else Color.White
     val scheme = remember(dark, appearance.pureBlack, primary, styledSeed, tintAmount) {
         if (dark) {
-            val base = if (appearance.pureBlack) Color.Black else Color(0xFF10151E)
-            val card = Color(0xFF1A2230)
+            val base = if (appearance.pureBlack) Color.Black else Color(0xFF101012)
+            val card = Color(0xFF1C1C1F)
             darkColorScheme(
                 primary = primary,
-                onPrimary = Color(0xFF15151B),
-                primaryContainer = lerp(card, primary, 0.19f * tintAmount),
+                onPrimary = onAccent,
+                primaryContainer = lerp(card, primary, 0.075f * tintAmount),
                 onPrimaryContainer = Color(0xFFF5F5FA),
-                secondaryContainer = lerp(card, primary, 0.22f * tintAmount),
+                secondaryContainer = lerp(card, primary, 0.10f * tintAmount),
                 onSecondaryContainer = Color(0xFFF5F5FA),
                 surfaceTint = primary,
                 background = base,
                 surface = base,
                 onSurface = Color(0xFFF3F3F8),
                 onBackground = Color(0xFFF3F3F8),
-                onSurfaceVariant = Color(0xFFC3C4CE),
-                outline = Color(0xFF788599),
-                outlineVariant = Color(0xFF344254),
-                surfaceVariant = lerp(card, primary, 0.12f * tintAmount),
-                surfaceContainer = lerp(card, primary, 0.04f * tintAmount),
-                surfaceContainerHigh = lerp(card, primary, 0.08f * tintAmount),
-                surfaceContainerHighest = lerp(card, primary, 0.12f * tintAmount)
+                onSurfaceVariant = Color(0xFFAAAAB2),
+                outline = Color(0xFF83838B),
+                outlineVariant = Color(0xFF38383E),
+                surfaceVariant = Color(0xFF303034),
+                surfaceContainer = card,
+                surfaceContainerHigh = Color(0xFF27272B),
+                surfaceContainerHighest = Color(0xFF343438)
             )
         } else {
-            val base = Color(0xFFF4F7FC)
+            val base = Color(0xFFF2F2F7)
             lightColorScheme(
                 primary = primary,
-                onPrimary = Color.White,
-                primaryContainer = lerp(base, styledSeed, 0.23f * tintAmount),
+                onPrimary = onAccent,
+                primaryContainer = lerp(Color.White, styledSeed, 0.065f * tintAmount),
                 onPrimaryContainer = Color(0xFF191922),
-                secondaryContainer = lerp(base, styledSeed, 0.26f * tintAmount),
+                secondaryContainer = lerp(base, styledSeed, 0.11f * tintAmount),
                 onSecondaryContainer = Color(0xFF191922),
                 surfaceTint = primary,
                 background = base,
                 surface = base,
                 onSurface = Color(0xFF191922),
                 onBackground = Color(0xFF191922),
-                onSurfaceVariant = Color(0xFF50515E),
-                outline = Color(0xFF6D778B),
-                outlineVariant = Color(0xFFCED8E6),
-                surfaceVariant = lerp(base, styledSeed, 0.16f * tintAmount),
-                surfaceContainer = lerp(Color.White, styledSeed, 0.025f * tintAmount),
-                surfaceContainerHigh = lerp(Color(0xFFEDF2FA), styledSeed, 0.045f * tintAmount),
-                surfaceContainerHighest = lerp(Color(0xFFEDF2FA), styledSeed, 0.09f * tintAmount)
+                onSurfaceVariant = Color(0xFF666670),
+                outline = Color(0xFF85858E),
+                outlineVariant = Color(0xFFD8D8DF),
+                surfaceVariant = Color(0xFFE8E8ED),
+                surfaceContainer = Color.White,
+                surfaceContainerHigh = Color(0xFFF7F7FA),
+                surfaceContainerHighest = Color(0xFFECECF1)
             )
         }
     }
@@ -123,6 +125,19 @@ fun WaferAITheme(
             if (animateLaunch) StartupTransition(true, launchReady, onLaunchFinished, content) else content()
         }
     }
+}
+
+internal fun readableAccent(seed: Color, dark: Boolean): Color {
+    val background = if (dark) Color(0xFF27272B) else Color(0xFFF2F2F7)
+    val towards = if (dark) Color.White else Color.Black
+    var color = lerp(seed.copy(alpha = 1f), towards, if (dark) 0.32f else 0.18f)
+    repeat(24) {
+        val contrast = (maxOf(color.luminance(), background.luminance()) + 0.05f) /
+            (minOf(color.luminance(), background.luminance()) + 0.05f)
+        if (contrast >= 4.5f) return color
+        color = lerp(color, towards, 0.08f)
+    }
+    return color
 }
 
 private val StudioShapes = Shapes(

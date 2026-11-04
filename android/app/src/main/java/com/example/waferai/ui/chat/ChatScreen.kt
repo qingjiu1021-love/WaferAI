@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.widthIn
 import com.example.waferai.ui.theme.LocalAppLanguage
@@ -17,6 +18,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +57,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -279,13 +282,8 @@ internal fun ChatScreen(
                 if (state.pending != null && !state.writing) TextButton(viewModel::cancel) { Text("停止等待") }
             }
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = scheme.surfaceContainer,
-                border = BorderStroke(1.dp, scheme.outlineVariant)) {
+                shadowElevation = 2.dp, border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.35f))) {
                 Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.material3.FilterChip(selected = state.webSearch, onClick = viewModel::toggleWebSearch,
-                            enabled = !state.busy, label = { Text(if (state.webSearch) "联网搜索已开启" else "联网搜索") },
-                            leadingIcon = { StudioGlyph(StudioIcon.LANGUAGE, Modifier.size(16.dp), scheme.primary) })
-                    }
                     if (state.webSearch) Text("发送后将用本次问题检索网页；附件与记忆不会交给搜索服务。", Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall)
                     TextField(state.draft, viewModel::edit, modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("输入问题") }, maxLines = 4, enabled = !state.busy,
@@ -325,6 +323,15 @@ internal fun ChatScreen(
                                 onPlugins = { attachMenu = false; focus.clearFocus(); onOpenPlugins() },
                                 onThinking = { attachMenu = false; focus.clearFocus(); thinkingDialog = true }
                             )
+                        }
+                        IconButton(viewModel::toggleWebSearch, enabled = !state.busy,
+                            modifier = Modifier.semantics {
+                                contentDescription = if (state.webSearch) "联网搜索已开启" else "联网搜索"
+                                stateDescription = if (state.webSearch) "已开启" else "已关闭"
+                            }.clip(RoundedCornerShape(50)).background(
+                                if (state.webSearch) scheme.primary.copy(alpha = 0.12f) else Color.Transparent)) {
+                            StudioGlyph(StudioIcon.LANGUAGE, Modifier.size(21.dp),
+                                if (state.webSearch) scheme.primary else scheme.onSurfaceVariant)
                         }
                         Spacer(Modifier.weight(1f))
                         Box(Modifier.widthIn(max = 136.dp)) {
@@ -450,16 +457,17 @@ private fun ChatBubble(title: String, body: String, user: Boolean) {
         Card(
             modifier = Modifier.fillMaxWidth(if (user) 0.88f else 1f),
             shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.68f)),
-            colors = CardDefaults.cardColors(containerColor = if (user) scheme.primaryContainer else scheme.surfaceContainer)
+            border = if (user) null else BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f)),
+            colors = CardDefaults.cardColors(containerColor = if (user) scheme.primary else scheme.surfaceContainer,
+                contentColor = if (user) scheme.onPrimary else scheme.onSurface)
         ) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!user) StudioBadge(StudioIcon.AI, 24)
-                    Text(title, style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+                    Text(title, style = MaterialTheme.typography.labelLarge, color = if (user) scheme.onPrimary.copy(alpha = 0.8f) else scheme.primary)
                 }
                 val display = remember(body, user) { if (user) body else readableReply(body) }
-                SelectionContainer { androidx.compose.material3.Text(display) }
+                SelectionContainer { androidx.compose.material3.Text(display, color = if (user) scheme.onPrimary else scheme.onSurface) }
             }
         }
     }

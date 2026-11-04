@@ -35,9 +35,9 @@ import java.util.Locale
 
 @Composable
 internal fun SectionHeading(title: String, action: String? = null, onAction: () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface)
+    Row(Modifier.fillMaxWidth().heightIn(min = 32.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (action != null) TextButton(onAction) { Text(action) }
     }
 }
@@ -66,9 +66,9 @@ internal fun ActionTile(title: String, detail: String, icon: StudioIcon, onClick
                         modifier: Modifier = Modifier, enabled: Boolean = true) {
     val scheme = MaterialTheme.colorScheme
     Surface(onClick, modifier.fillMaxWidth(), enabled = enabled, shape = RoundedCornerShape(20.dp),
-        color = scheme.surfaceContainer, border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.5f))) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            StudioBadge(icon, 32)
+        color = scheme.surfaceContainer, border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f))) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            StudioBadge(icon, 36)
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
         }

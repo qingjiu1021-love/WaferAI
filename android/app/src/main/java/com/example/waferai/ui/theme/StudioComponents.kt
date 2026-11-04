@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,14 +43,21 @@ internal enum class StudioIcon {
 @Composable
 internal fun StudioHeader(title: String, section: String, icon: StudioIcon, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    Row(modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        StudioBadge(icon, size = 44)
+    Row(modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(section, color = scheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall.copy(
-                letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold))
-            Text(title, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold))
+            Text(title, style = MaterialTheme.typography.headlineLarge)
+            val subtitle = when (icon) {
+                StudioIcon.WAFER -> if (LocalEnglish.current) "Import. Inspect. Understand." else "导入、检测，发现每一片的价值"
+                StudioIcon.DATA -> if (LocalEnglish.current) "Your results, at a glance" else "从每一次检测，发现趋势"
+                StudioIcon.AI -> if (LocalEnglish.current) "A little help, a fresh perspective" else "随时提问，让想法更进一步"
+                StudioIcon.TOOLS -> if (LocalEnglish.current) "Everything you need, together" else "常用能力，触手可及"
+                else -> ""
+            }
+            if (subtitle.isNotBlank()) Text(subtitle, color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
         }
+        StudioBadge(icon, size = 36)
     }
 }
 
@@ -57,9 +67,9 @@ internal fun StudioPanel(
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(modifier, shape = RoundedCornerShape(22.dp), color = color,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    Surface(modifier, shape = RoundedCornerShape(24.dp), color = color,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 
@@ -70,21 +80,22 @@ internal fun StudioAction(
     icon: StudioIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    grouped: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
     Surface(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp), color = scheme.surfaceContainer,
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.60f))) {
-        Row(Modifier.padding(horizontal = 13.dp, vertical = 12.dp),
+        shape = if (grouped) RectangleShape else RoundedCornerShape(20.dp), color = scheme.surfaceContainer,
+        border = if (grouped) null else BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f))) {
+        Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            StudioBadge(icon, size = 36)
+            StudioBadge(icon, size = 30)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (detail.isNotEmpty()) Text(detail, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            StudioGlyph(StudioIcon.ARROW, Modifier.size(15.dp), scheme.onSurfaceVariant)
+            StudioGlyph(StudioIcon.ARROW, Modifier.size(12.dp), scheme.onSurfaceVariant.copy(alpha = 0.65f))
         }
     }
 }
@@ -92,9 +103,30 @@ internal fun StudioAction(
 @Composable
 internal fun StudioBadge(icon: StudioIcon, size: Int = 36) {
     val scheme = MaterialTheme.colorScheme
-    Box(Modifier.size(size.dp).background(scheme.primaryContainer, RoundedCornerShape((size / 3).dp)),
+    val accent = when (icon) {
+        StudioIcon.BOOK, StudioIcon.MEMORY -> Color(0xFFAF74EA)
+        StudioIcon.TRAINING, StudioIcon.DATA -> Color(0xFF38AA8C)
+        StudioIcon.FILE, StudioIcon.CLOCK -> Color(0xFFDB9754)
+        else -> scheme.primary
+    }
+    Box(Modifier.size(size.dp).background(accent.copy(alpha = 0.12f), RoundedCornerShape((size / 3).dp)),
         contentAlignment = Alignment.Center) {
-        StudioGlyph(icon, Modifier.size((size / 2).dp), scheme.primary)
+        StudioGlyph(icon, Modifier.size((size * 0.56f).dp), accent)
+    }
+}
+
+internal data class StudioLink(val title: String, val detail: String, val icon: StudioIcon, val onClick: () -> Unit)
+
+@Composable internal fun StudioActionGroup(links: List<StudioLink>) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))) {
+        Column {
+            links.forEachIndexed { index, link ->
+                StudioAction(link.title, link.detail, link.icon, link.onClick, grouped = true)
+                if (index < links.lastIndex) HorizontalDivider(Modifier.padding(start = 58.dp), thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            }
+        }
     }
 }
 

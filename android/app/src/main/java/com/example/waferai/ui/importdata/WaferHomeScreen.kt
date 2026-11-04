@@ -310,7 +310,7 @@ private fun WorkspaceIntro(onImport: () -> Unit, onImage: () -> Unit, onDemo: ()
     val art = if (LocalDensity.current.fontScale > 1.25f) 84.dp else 124.dp
     Column(Modifier.fillMaxWidth().clip(shape)
         .background(Brush.linearGradient(listOf(scheme.primaryContainer, scheme.surfaceContainer)))
-        .border(1.dp, scheme.outlineVariant.copy(alpha = 0.75f), shape).padding(18.dp),
+        .border(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f), shape).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {

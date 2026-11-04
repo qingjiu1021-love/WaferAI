@@ -37,22 +37,22 @@ internal fun Modifier.glassSurface(
     if (level == GlassLevel.NONE) return clip(shape).background(tint)
 
     val intense = level == GlassLevel.INTENSE
-    val highlight = if (intense) 0.17f else 0.045f
+    val highlight = if (intense) 0.09f else 0.025f
     val safeHighlight = if (!dark && tint.luminance() < 0.18f) highlight * 0.45f else highlight
     val fill = Brush.verticalGradient(
         0f to lerp(tint, Color.White, safeHighlight).copy(alpha = opacity),
         0.48f to tint.copy(alpha = opacity * if (intense) 0.84f else 0.93f),
-        1f to lerp(tint, Color.Black, if (intense) 0.12f else 0.025f).copy(alpha = opacity)
+        1f to tint.copy(alpha = opacity)
     )
     val rim = Brush.verticalGradient(
-        0f to Color.White.copy(alpha = if (intense) 0.42f else 0.19f),
-        0.48f to Color.White.copy(alpha = if (intense) 0.12f else 0.07f),
-        1f to accent.copy(alpha = if (intense) 0.48f else 0.22f)
+        0f to Color.White.copy(alpha = if (intense) 0.32f else 0.16f),
+        0.48f to Color.White.copy(alpha = 0.05f),
+        1f to accent.copy(alpha = if (intense) 0.16f else 0.08f)
     )
-    return shadow(if (intense) 4.dp else 1.dp, shape)
+    return shadow(if (intense) 8.dp else 3.dp, shape)
         .clip(shape)
         .background(fill)
-        .border(1.dp, rim, shape)
+        .border(0.5.dp, rim, shape)
 }
 
 @Composable
@@ -66,12 +66,12 @@ fun GlassButton(
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.4f
     val level = if (enabled) LocalGlassLevel.current else GlassLevel.NONE
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(50)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed && level != GlassLevel.NONE) 0.98f else 1f,
-        animationSpec = tween(if (pressed) 90 else 145),
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = tween(if (pressed) 65 else 135),
         label = "glass press"
     )
     val tint = when {
@@ -89,7 +89,7 @@ fun GlassButton(
         shape = shape,
         interactionSource = interaction,
         elevation = null,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
             contentColor = if (prominent) scheme.onPrimary else scheme.onSurface,

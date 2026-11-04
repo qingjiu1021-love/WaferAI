@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.Row
 import com.example.waferai.ui.theme.ActionTile
 import com.example.waferai.ui.theme.SectionHeading
 import com.example.waferai.ui.theme.StudioPanel
+import com.example.waferai.ui.theme.StudioActionGroup
+import com.example.waferai.ui.theme.StudioLink
 import com.example.waferai.ui.theme.StatusPill
 import com.example.waferai.ui.theme.UiText as Text
 
@@ -58,10 +60,10 @@ internal fun ToolsScreen(onLogs: () -> Unit, onKnowledge: () -> Unit, onTrain: (
             ActionTile("插件", "连接国内外资料来源", StudioIcon.PLUG, onPlugins, Modifier.weight(1f))
         }
         SectionHeading("模型与追溯")
-        StudioAction("手机模型训练", "自动训练并验证可用于检测的轻量模型。", StudioIcon.TRAINING, onTrain)
-        StudioAction("操作日志", "查看导入、识别、导出与知识库同步记录。", StudioIcon.FILE, onLogs)
-        Text("WaferAI ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        StudioActionGroup(listOf(
+            StudioLink("手机模型训练", "自动训练并验证可用于检测的轻量模型。", StudioIcon.TRAINING, onTrain),
+            StudioLink("操作日志", "查看导入、识别、导出与知识库同步记录。", StudioIcon.FILE, onLogs)
+        ))
     }
 }
 
