@@ -250,10 +250,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val importState by importViewModel.state.collectAsStateWithLifecycle()
+                val guideState by importViewModel.guide.collectAsStateWithLifecycle()
                 val historyState by historyViewModel.state.collectAsStateWithLifecycle()
                 val lotState by lotViewModel.state.collectAsStateWithLifecycle()
                 val aiState by aiViewModel.state.collectAsStateWithLifecycle()
-                val chatState by chatViewModel.state.collectAsStateWithLifecycle()
+                val chatBusy by chatViewModel.busy.collectAsStateWithLifecycle()
                 val accountState by accountViewModel.state.collectAsStateWithLifecycle()
                 val userProfileState by userProfileViewModel.state.collectAsStateWithLifecycle()
                 LaunchedEffect(accountState.endpoint, accountState.user?.id) { userProfileViewModel.select(accountState.endpoint, accountState.user?.id) }
@@ -397,6 +398,22 @@ class MainActivity : ComponentActivity() {
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     uri?.let(importViewModel::importFile)
                 }
+                val guideJsonSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+                    uri?.let { importViewModel.saveGuideFile(it, com.example.waferai.data.local.GuideFile.JSON) }
+                }
+                val guideCsvSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+                    uri?.let { importViewModel.saveGuideFile(it, com.example.waferai.data.local.GuideFile.CSV) }
+                }
+                val guideImageSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+                    uri?.let { importViewModel.saveGuideFile(it, com.example.waferai.data.local.GuideFile.IMAGE) }
+                }
+                val saveGuideFile: (com.example.waferai.data.local.GuideFile) -> Unit = { file ->
+                    when (file) {
+                        com.example.waferai.data.local.GuideFile.JSON -> guideJsonSaver.launch(file.filename)
+                        com.example.waferai.data.local.GuideFile.CSV -> guideCsvSaver.launch(file.filename)
+                        com.example.waferai.data.local.GuideFile.IMAGE -> guideImageSaver.launch(file.filename)
+                    }
+                }
                 var selectedImage by rememberSaveable { mutableStateOf<Uri?>(null) }
                 val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     selectedImage = uri
@@ -536,10 +553,10 @@ class MainActivity : ComponentActivity() {
                                     Page.COMPARE -> if (comparison.size == 2) {
                                         WaferCompareScreen(repository, comparison[0], comparison[1], openWafer, goBack, modifier)
                                     }
-                                    Page.MODELS -> AiCenterScreen(aiState, aiViewModel, !importState.analyzing && !chatState.busy,
+                                    Page.MODELS -> AiCenterScreen(aiState, aiViewModel, !importState.analyzing && !chatBusy,
                                         onBack = goBack, modifier = modifier.consumeWindowInsets(insets))
                                     Page.AI, Page.CHAT -> ChatScreen(
-                                        chatState, chatViewModel, aiState.library, appearance.chatProfileId,
+                                        chatViewModel, aiState.library, appearance.chatProfileId,
                                         aiState.saving || importState.analyzing, importState.wafer, importState.prediction,
                                         onSelectModel = { saveAppearance(appearance.copy(chatProfileId = it)) },
                                         onAddModel = { openModels(true) }, onManageModels = { openModels(false) },
@@ -622,12 +639,13 @@ class MainActivity : ComponentActivity() {
                                         appearance = appearance,
                                         onChange = { saveAppearance(it) },
                                         onReset = { saveAppearance(Appearance(), restoreDefaults = true) },
-                                        canReset = !aiState.saving && !importState.analyzing && !chatState.busy,
+                                        canReset = !aiState.saving && !importState.analyzing && !chatBusy,
                                         onBack = goBack,
                                         modifier = modifier
                                     )
                                     Page.OVERVIEW, Page.WAFER -> WaferHomeScreen(
                                         importState = importState,
+                                        guideState = guideState, onSaveGuideFile = saveGuideFile,
                                         overview = overview, onHistory = openHistory, onOpenWafer = openWafer,
                                         onBack = goBack.takeIf { waferReturn != null },
                                         onSelectFile = { picker.launch(arrayOf("*/*")) },
@@ -637,7 +655,9 @@ class MainActivity : ComponentActivity() {
                                             { importViewModel.inspectWafer(appearance.yieldThreshold, trained = true) }
                                         },
                                         onLoadDemo = importViewModel::loadDemo,
-                                        onAnalyze = importViewModel::analyzeWafer,
+                                        onAnalyze = { importViewModel.analyzeWafer(appearance.analysisPreset, appearance.yieldThreshold) },
+                                        analysisPreset = appearance.analysisPreset,
+                                        onAnalysisPreset = { saveAppearance(appearance.copy(analysisPreset = it)) },
                                         onCancelAnalysis = importViewModel::cancelAnalysis,
                                         mapFilter = appearance.mapFilter,
                                         onMapFilterChange = { saveAppearance(appearance.copy(mapFilter = it)) },
@@ -648,7 +668,7 @@ class MainActivity : ComponentActivity() {
                                         yieldThreshold = appearance.yieldThreshold,
                                         onOpenSettings = { openModels(false) },
                                         aiProfiles = aiState.library,
-                                        aiSaving = aiState.saving || chatState.busy,
+                                        aiSaving = aiState.saving || chatBusy,
                                         aiError = aiState.error,
                                         onSelectAiProfile = aiViewModel::select,
                                         onChat = { chatOrigin = Page.WAFER; page = Page.CHAT },

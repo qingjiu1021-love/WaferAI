@@ -40,7 +40,25 @@ data class ImportUiState(
     val analysisError: String? = null
 )
 
+data class GuideUiState(val saving: Boolean = false, val message: String? = null, val error: String? = null)
+
 class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
+    init { viewModelScope.launch { repository.restoreTraining() } }
+    private val mutableGuide = MutableStateFlow(GuideUiState())
+    val guide = mutableGuide.asStateFlow()
+
+    fun saveGuideFile(uri: Uri, file: com.example.waferai.data.local.GuideFile) {
+        if (mutableGuide.value.saving) return
+        mutableGuide.value = GuideUiState(saving = true)
+        viewModelScope.launch {
+            try {
+                repository.saveGuideFile(uri, file)
+                mutableGuide.value = GuideUiState(message = "已保存 ${file.filename}，接下来可从文件选择器导入。")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { mutableGuide.value = GuideUiState(error = "保存失败，请重新选择可写入的位置。") }
+        }
+    }
+
     private val mutableState = MutableStateFlow(ImportUiState())
     val state = mutableState.asStateFlow()
     private var pendingReport: ReportSnapshot? = null
@@ -60,7 +78,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         }
     }
 
-    fun analyzeWafer() {
+    fun analyzeWafer(preset: com.example.waferai.data.ai.AnalysisPreset = com.example.waferai.data.ai.AnalysisPreset.ENGINEERING, threshold: Int = 90) {
         val current=mutableState.value
         val wafer=current.wafer ?: return
         val prediction=current.prediction ?: return
@@ -68,7 +86,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         mutableState.value=current.copy(analyzing=true,analysisError=null)
         analysisJob=viewModelScope.launch {
             try {
-                val analysis=repository.analyze(wafer,prediction)
+                val analysis=repository.analyze(wafer, prediction, preset, threshold)
                 if(mutableState.value.wafer?.id==wafer.id) mutableState.value=mutableState.value.copy(analyzing=false,analysis=analysis)
             } catch(cancelled: CancellationException) { throw cancelled }
             catch(error: Exception) { mutableState.value=mutableState.value.copy(analyzing=false,analysisError=error.message ?: "在线解析失败，请稍后重试。") }

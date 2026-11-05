@@ -11,6 +11,7 @@ import java.io.FileNotFoundException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.UUID
 
 internal data class ChatTurn(
     val question: String,
@@ -20,7 +21,8 @@ internal data class ChatTurn(
     val profileId: String? = null,
     val attachmentName: String? = null,
     val sources: List<ChatSource>? = null,
-    val searchNotice: String? = null
+    val searchNotice: String? = null,
+    val id: String? = UUID.randomUUID().toString()
 )
 
 internal data class ChatConversation(
@@ -53,11 +55,11 @@ internal class ChatStore(context: Context, name: String = "ai-chat.json") {
         if (json.isJsonArray) {
             // Upgrade the conversation written by older versions on the next save.
             val turns = gson.fromJson(json, Array<ChatTurn>::class.java).toList()
-            ChatArchive().updateActive(turns)
+            ChatArchive().updateActive(turns).withTurnIds()
         } else {
             val archive = gson.fromJson(json, ChatArchive::class.java)
             check(archive.conversations.any { it.id == archive.activeId })
-            archive
+            archive.withTurnIds()
         }
     } catch (_: FileNotFoundException) {
         ChatArchive()
@@ -75,6 +77,18 @@ internal class ChatStore(context: Context, name: String = "ai-chat.json") {
             throw error
         }
     }
+}
+
+/** Upgrade old archives once, without changing their text, ordering or active chat. */
+internal fun ChatArchive.withTurnIds(): ChatArchive {
+    val used = HashSet<String>()
+    return copy(conversations = conversations.map { conversation ->
+        conversation.copy(turns = conversation.turns.map { turn ->
+            val id = turn.id
+            if (!id.isNullOrBlank() && used.add(id)) turn
+            else turn.copy(id = UUID.randomUUID().toString().also(used::add))
+        })
+    })
 }
 
 internal class ChatMemoryStore(context: Context) {

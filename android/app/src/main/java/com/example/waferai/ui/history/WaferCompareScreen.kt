@@ -103,10 +103,10 @@ private fun WaferCompareCard(title: String, wafer: WaferDetail, onOpen: (Int) ->
                 val factor = minOf(size.width / wafer.cols, size.height / wafer.rows)
                 val width = (wafer.cols * factor).roundToInt().coerceAtLeast(1)
                 val height = (wafer.rows * factor).roundToInt().coerceAtLeast(1)
-                drawImage(
-                    image, dstOffset = IntOffset(((size.width - width) / 2f).roundToInt(), ((size.height - height) / 2f).roundToInt()),
+                image?.let { drawImage(
+                    it, dstOffset = IntOffset(((size.width - width) / 2f).roundToInt(), ((size.height - height) / 2f).roundToInt()),
                     dstSize = IntSize(width, height), filterQuality = FilterQuality.None
-                )
+                ) }
             }
             Text(String.format(Locale.CHINA, "良率 %.2f%%", wafer.yieldRate * 100), color = MaterialTheme.colorScheme.primary)
             Text("${wafer.rows} × ${wafer.cols} · 不合格 ${wafer.badCount}/${wafer.totalCount}",

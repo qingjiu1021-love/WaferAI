@@ -28,6 +28,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -61,6 +65,8 @@ internal class ChatViewModel(
     private val webPrefs = context.getSharedPreferences("chat_web_search", Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(ChatUiState())
     val state = mutable.asStateFlow()
+    val busy = state.map { it.busy }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     private var request: Job? = null
 
     init {
@@ -83,8 +89,12 @@ internal class ChatViewModel(
     fun toggleWebSearch() {
         if (mutable.value.busy) return
         val enabled = !mutable.value.webSearch
-        if (webPrefs.edit().putBoolean("enabled", enabled).commit()) mutable.value = mutable.value.copy(webSearch = enabled, error = null)
-        else mutable.value = mutable.value.copy(error = "无法保存联网搜索设置。")
+        mutable.value = mutable.value.copy(writing = true)
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) { webPrefs.edit().putBoolean("enabled", enabled).commit() }
+            mutable.value = if (saved) mutable.value.copy(webSearch = enabled, writing = false, error = null)
+            else mutable.value.copy(writing = false, error = "无法保存联网搜索设置。")
+        }
     }
 
     fun attach(uri: Uri, photo: Boolean, capture: Boolean = false) {
@@ -155,7 +165,7 @@ internal class ChatViewModel(
                     web.search(question)
                 } else ChatSearchResult(emptyList())
                 mutable.value = mutable.value.copy(searchNotice = search.notice, stage = if (profileId == null) "正在整理资料" else "等待模型思考与回复")
-                val (reply, model) = if (profileId == null) {
+                val (reply, model) = if (profileId == null) withContext(Dispatchers.Default) {
                     val localHistory = previous.turns.takeLastWhile { it.model == LocalWaferAssistant.Name }
                         .takeIf { rememberContext }.orEmpty()
                     require(attachment == null || attachment.jpeg == null || attachment.text != null) {
@@ -192,8 +202,11 @@ internal class ChatViewModel(
                     }
                     val history = previous.turns.takeLastWhile { it.profileId == contextId }
                         .takeIf { rememberContext }.orEmpty()
-                    client.chat(profile, ChatPrompt.messages(history, question, summary, memory, attachment, replyLanguage,
-                        if (previous.webSearch) ChatWebSearch.context(search) else ""), thinking) to
+                    val messages = withContext(Dispatchers.Default) {
+                        ChatPrompt.messages(history, question, summary, memory, attachment, replyLanguage,
+                            if (previous.webSearch) ChatWebSearch.context(search) else "")
+                    }
+                    client.chat(profile, messages, thinking) to
                         "${profile.profile.provider.title} · ${profile.profile.model}"
                 }
                 val updated = (previous.turns + ChatTurn(question, reply, model, summary, contextId, attachment?.name, search.sources, search.notice)).takeLast(30)

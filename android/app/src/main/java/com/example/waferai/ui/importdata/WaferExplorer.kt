@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.waferai.data.analysis.WaferMapFilter
@@ -63,8 +64,14 @@ import com.example.waferai.data.analysis.WaferSpatialStats
 import com.example.waferai.data.remote.WaferDetail
 import java.util.Locale
 import kotlin.math.floor
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import com.example.waferai.data.analysis.MatrixIdentity
+import com.example.waferai.data.analysis.WaferSummary
+import com.example.waferai.data.analysis.failureIndices
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -109,21 +116,40 @@ private data class Viewport(val scale: Float = 1f, val pan: Offset = Offset.Zero
 private fun fittedCell(size: IntSize, wafer: WaferDetail) =
     minOf(size.width.toFloat() / wafer.cols, size.height.toFloat() / wafer.rows)
 
+private data class RasterKey(val matrix: MatrixIdentity, val focus: MatrixIdentity, val palette: List<Int>)
+
 @Composable
-internal fun rememberWaferImage(wafer: WaferDetail, filter: WaferMapFilter = WaferMapFilter.ALL): androidx.compose.ui.graphics.ImageBitmap {
+internal fun rememberWaferImage(
+    wafer: WaferDetail, filter: WaferMapFilter = WaferMapFilter.ALL,
+    focus: com.example.waferai.data.analysis.WaferFinding? = null
+): androidx.compose.ui.graphics.ImageBitmap? {
     val scheme = MaterialTheme.colorScheme
     val outside = lerp(scheme.surface, scheme.onSurface, 0.13f)
-    return remember(wafer.id, wafer.map, filter, outside) {
-        val palette = intArrayOf(
-            outside.toArgb(),
-            (if (filter == WaferMapFilter.FAIL) lerp(outside, GoodColor, 0.16f) else GoodColor).toArgb(),
-            (if (filter == WaferMapFilter.PASS) lerp(outside, BadColor, 0.16f) else BadColor).toArgb()
-        )
-        val data = IntArray(wafer.rows * wafer.cols) { index ->
-            palette[wafer.map[index / wafer.cols][index % wafer.cols]]
+    val palette = listOf(outside.toArgb(),
+        (if (filter == WaferMapFilter.FAIL) lerp(outside, GoodColor, 0.16f) else GoodColor).toArgb(),
+        (if (filter == WaferMapFilter.PASS) lerp(outside, BadColor, 0.16f) else BadColor).toArgb(),
+        scheme.primary.toArgb(),
+        lerp(scheme.surfaceContainer, outside, 0.18f).toArgb(),
+        lerp(scheme.surfaceContainer, GoodColor, 0.18f).toArgb(),
+        lerp(scheme.surfaceContainer, BadColor, 0.18f).toArgb())
+    val key = RasterKey(MatrixIdentity(wafer.map), MatrixIdentity(focus?.indices), palette)
+    val rendered by produceState<Pair<RasterKey, androidx.compose.ui.graphics.ImageBitmap>?>(null, key) {
+        value = withContext(Dispatchers.Default) {
+            val mask = focus?.let { BooleanArray(wafer.rows * wafer.cols).apply { it.indices.forEach { index -> this[index] = true } } }
+            val data = IntArray(wafer.rows * wafer.cols)
+            for (row in wafer.map.indices) {
+                currentCoroutineContext().ensureActive()
+                val bins = wafer.map[row]
+                for (col in bins.indices) {
+                    val index = row * wafer.cols + col
+                    data[index] = if (mask == null) palette[bins[col]] else if (mask[index]) palette[3] else palette[4 + bins[col]]
+                }
+            }
+            key to Bitmap.createBitmap(data, wafer.cols, wafer.rows, Bitmap.Config.ARGB_8888).asImageBitmap()
         }
-        Bitmap.createBitmap(data, wafer.cols, wafer.rows, Bitmap.Config.ARGB_8888).asImageBitmap()
     }
+    // A completed old request must never flash a different matrix or filter.
+    return rendered?.takeIf { it.first == key }?.second
 }
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
@@ -133,28 +159,47 @@ internal fun WaferExplorer(
     filter: WaferMapFilter,
     showRegionGuides: Boolean = false,
     onToggleRegionGuides: () -> Unit = {},
+    focus: com.example.waferai.data.analysis.WaferFinding? = null,
+    focusRevision: Int = 0,
+    onClearFocus: () -> Unit = {},
+    preparedFailures: IntArray? = null,
     onFilterChange: (WaferMapFilter) -> Unit
 ) {
-    var viewport by remember(wafer.id) { mutableStateOf(Viewport()) }
+    var viewport by remember(wafer.id, MatrixIdentity(wafer.map)) { mutableStateOf(Viewport()) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-    var selected by remember(wafer.id) { mutableStateOf<Die?>(null) }
+    var selected by remember(wafer.id, MatrixIdentity(wafer.map)) { mutableStateOf<Die?>(null) }
     val mapFocus = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
-    val failures = remember(wafer.id, wafer.map) {
-        IntArray(wafer.badCount).also { indices ->
-            var position = 0
-            wafer.map.forEachIndexed { row, values ->
-                values.forEachIndexed { col, value -> if (value == 2) indices[position++] = row * wafer.cols + col }
-            }
+    val failures = preparedFailures ?: run {
+        val calculated by produceState<Pair<MatrixIdentity, IntArray>?>(null, MatrixIdentity(wafer.map)) {
+            value = withContext(Dispatchers.Default) { MatrixIdentity(wafer.map) to failureIndices(wafer) }
         }
+        calculated?.takeIf { it.first == MatrixIdentity(wafer.map) }?.second ?: intArrayOf()
     }
     val failureIndex = selected?.let { failures.binarySearch(it.row * wafer.cols + it.column) } ?: -1
     val scheme = MaterialTheme.colorScheme
     val outside = lerp(scheme.surface, scheme.onSurface, 0.13f)
     val mapBackground = scheme.surfaceContainer
     val muted = lerp(outside, GoodColor, 0.16f)
-    val pixels = rememberWaferImage(wafer, filter)
-    val frame by rememberUpdatedState(viewport.frame(viewSize, wafer))
+    val pixels = rememberWaferImage(wafer, filter, focus)
+    androidx.compose.runtime.LaunchedEffect(MatrixIdentity(wafer.map), MatrixIdentity(focus?.indices), focusRevision, viewSize) {
+        if (focus != null && viewSize.width > 0 && viewSize.height > 0 && focus.indices.isNotEmpty()) {
+            val bounds = withContext(Dispatchers.Default) {
+                intArrayOf(focus.indices.minOf { it / wafer.cols }, focus.indices.maxOf { it / wafer.cols },
+                    focus.indices.minOf { it % wafer.cols }, focus.indices.maxOf { it % wafer.cols })
+            }
+            val (firstRow, lastRow, firstCol, lastCol) = bounds
+            val cell = fittedCell(viewSize, wafer)
+            val scale = minOf(viewSize.width / ((lastCol - firstCol + 3) * cell),
+                viewSize.height / ((lastRow - firstRow + 3) * cell)).coerceIn(1f, MaxZoom)
+            val centerCol = (firstCol + lastCol + 1) / 2f
+            val centerRow = (firstRow + lastRow + 1) / 2f
+            viewport = Viewport().transform(viewSize, wafer, scale,
+                Offset((wafer.cols / 2f - centerCol) * cell * scale, (wafer.rows / 2f - centerRow) * cell * scale))
+            selected = null
+            mapFocus.bringIntoView()
+        } else if (focus == null) viewport = Viewport()
+    }
     val transformState = rememberTransformableState { zoom, pan, _ ->
         viewport = viewport.transform(viewSize, wafer, zoom, pan)
     }
@@ -189,6 +234,10 @@ internal fun WaferExplorer(
         }
         FilterChip(showRegionGuides, onToggleRegionGuides, label = { Text("分区参考线") })
     }
+    if (focus != null) {
+        Text("已定位：${focus.title} · 高亮 ${focus.indices.size} 颗不合格芯片", style = MaterialTheme.typography.titleSmall)
+        TextButton(onClearFocus) { Text("清除发现高亮") }
+    }
     val die = selected
     val status = die?.let {
         when (wafer.map[it.row][it.column]) {
@@ -203,11 +252,13 @@ internal fun WaferExplorer(
                 .clip(RoundedCornerShape(22.dp)).background(mapBackground)
                 .onSizeChanged { viewSize = it }
                 .transformable(transformState, canPan = { viewport.scale > 1f })
-                .pointerInput(wafer.id) {
-                    detectTapGestures { tap -> selected = frame.dieAt(tap, wafer.rows, wafer.cols) }
+                .pointerInput(wafer.id, MatrixIdentity(wafer.map)) {
+                    detectTapGestures { tap -> selected = viewport.frame(viewSize, wafer).dieAt(tap, wafer.rows, wafer.cols) }
                 }
                 .semantics {
-                    contentDescription = "晶圆图，${wafer.rows} 行 ${wafer.cols} 列。可双指缩放，放大后拖动，点击查看芯片状态。"
+                    stateDescription = if (pixels == null) "正在绘制" else "绘制完成"
+                    contentDescription = "晶圆图，${wafer.rows} 行 ${wafer.cols} 列。可双指缩放，放大后拖动，点击查看芯片状态。" +
+                        (focus?.let { "已定位：${it.title}，高亮${it.indices.size}颗。" } ?: "")
                 }
         ) {
             val guide = scheme.outlineVariant.copy(alpha = 0.28f)
@@ -219,7 +270,7 @@ internal fun WaferExplorer(
             }
             val current = viewport.frame(IntSize(size.width.roundToInt(), size.height.roundToInt()), wafer)
             val cell = current.cell
-            if (cell > 0f) {
+            if (cell > 0f && pixels != null) {
                 withTransform({
                     translate(current.origin.x, current.origin.y)
                     scale(cell, cell, Offset.Zero)
@@ -232,11 +283,15 @@ internal fun WaferExplorer(
                     val right = left + wafer.cols * cell
                     val bottom = top + wafer.rows * cell
                     val gridColor = Color.White.copy(alpha = 0.26f)
-                    for (column in 1 until wafer.cols) {
+                    val firstCol = ceil(-left / cell).toInt().coerceIn(1, wafer.cols)
+                    val lastCol = floor((size.width - left) / cell).toInt().coerceIn(0, wafer.cols - 1)
+                    for (column in firstCol..lastCol) {
                         val x = left + column * cell
                         if (x in 0f..size.width) drawLine(gridColor, Offset(x, top), Offset(x, bottom))
                     }
-                    for (row in 1 until wafer.rows) {
+                    val firstRow = ceil(-top / cell).toInt().coerceIn(1, wafer.rows)
+                    val lastRow = floor((size.height - top) / cell).toInt().coerceIn(0, wafer.rows - 1)
+                    for (row in firstRow..lastRow) {
                         val y = top + row * cell
                         if (y in 0f..size.height) drawLine(gridColor, Offset(left, y), Offset(right, y))
                     }
@@ -268,20 +323,16 @@ internal fun WaferExplorer(
         )
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Legend(if (filter == WaferMapFilter.FAIL) muted else GoodColor, "合格")
-        Legend(if (filter == WaferMapFilter.PASS) lerp(outside, BadColor, 0.16f) else BadColor, "不合格")
+        Legend(if (focus != null) lerp(mapBackground, GoodColor, 0.18f) else if (filter == WaferMapFilter.FAIL) muted else GoodColor, "合格")
+        Legend(if (focus != null) lerp(mapBackground, BadColor, 0.18f) else if (filter == WaferMapFilter.PASS) lerp(outside, BadColor, 0.16f) else BadColor, "不合格")
         Legend(outside, "非芯片")
+        if (focus != null) Legend(scheme.primary, "当前发现中的不合格")
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("${(viewport.scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge)
-        Row {
-            TextButton({ zoom(1f / 1.6f) }, enabled = viewport.scale > 1f) { Text("缩小") }
-            TextButton({ zoom(1.6f) }, enabled = viewport.scale < MaxZoom) { Text("放大") }
-            TextButton({ viewport = Viewport() }, enabled = viewport.scale > 1f) { Text("还原视图") }
-        }
-    }
-    if (failures.isEmpty()) {
+    ZoomControls({ viewport.scale }, { zoom(it) }, { viewport = Viewport() })
+    if (wafer.badCount == 0) {
         Text("当前晶圆没有标记为不合格的芯片。", style = MaterialTheme.typography.bodySmall)
+    } else if (failures.isEmpty()) {
+        Text("正在准备异常坐标…", style = MaterialTheme.typography.bodySmall)
     } else if (failureIndex < 0) {
         TextButton({ locate(0) }) { Text("查看异常位置") }
     } else {
@@ -296,23 +347,40 @@ internal fun WaferExplorer(
     }
 }
 
+@Composable
+private fun ZoomControls(scale: () -> Float, onZoom: (Float) -> Unit, onReset: () -> Unit) {
+    // Read gesture state in this small scope; panning now invalidates drawing only.
+    val currentScale by rememberUpdatedState(scale)
+    val percent by remember { androidx.compose.runtime.derivedStateOf { (currentScale() * 100).roundToInt() } }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("$percent%", style = MaterialTheme.typography.labelLarge)
+        Row {
+            TextButton({ onZoom(1f / 1.6f) }, enabled = percent > 100) { Text("缩小") }
+            TextButton({ onZoom(1.6f) }, enabled = percent < (MaxZoom * 100).toInt()) { Text("放大") }
+            TextButton(onReset, enabled = percent > 100) { Text("还原视图") }
+        }
+    }
+}
+
 private val RegionGuideRadii = listOf(
     WaferSpatialStats.CENTER_BOUNDARY.toFloat(), WaferSpatialStats.MIDDLE_BOUNDARY.toFloat()
 )
 
 @Composable
-internal fun SpatialStatsCard(wafer: WaferDetail) {
-    val stats by produceState<Pair<WaferSpatialStats, WaferClusters>?>(null, wafer.id, wafer.map) {
-        value = null
-        value = withContext(Dispatchers.Default) {
-            WaferSpatialStats.calculate(wafer) to WaferClusters.calculate(wafer.map)
+internal fun SpatialStatsCard(wafer: WaferDetail, showRings: Boolean = true, prepared: WaferSummary? = null) {
+    val cached = prepared?.let { WaferSpatialStats(it.report.rings, emptyList()) to it.clusters }
+    val stats = cached ?: run {
+        val computed by produceState<Pair<MatrixIdentity, Pair<WaferSpatialStats, WaferClusters>>?>(null, MatrixIdentity(wafer.map)) {
+            value = withContext(Dispatchers.Default) { MatrixIdentity(wafer.map) to (WaferSpatialStats.calculate(wafer) to WaferClusters.calculate(wafer.map)) }
         }
+        computed?.takeIf { it.first == MatrixIdentity(wafer.map) }?.second
     }
     val (current, clusters) = stats ?: return
     val scheme = MaterialTheme.colorScheme
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainer)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text("分区缺陷统计", style = MaterialTheme.typography.titleMedium)
+            if (showRings) {
             current.rings.forEachIndexed { index, region ->
                 if (index > 0) HorizontalDivider()
                 val rate = region.badRate?.let { String.format(Locale.CHINA, "%.2f%%", it * 100) } ?: "无有效芯片"
@@ -327,6 +395,7 @@ internal fun SpatialStatsCard(wafer: WaferDetail) {
             Text("按矩阵中心的归一化距离分区。比率为各区不合格芯片数 ÷ 该区有效芯片数。",
                 style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
             HorizontalDivider()
+            }
             Text("缺陷聚集分析", style = MaterialTheme.typography.titleMedium)
             Text("连通区数量 ${clusters.count}")
             clusters.largest?.let { region ->

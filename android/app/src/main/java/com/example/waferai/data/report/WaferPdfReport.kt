@@ -128,29 +128,79 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
         y += 75f
     }
 
+    private val chartData by lazy { WaferReportData.calculate(snapshot.wafer) }
+
     private fun detectionCharts() {
-        val wafer = snapshot.wafer
-        reserve(116f)
-        paragraph("芯片状态与分区不合格率", 12f, blue, true)
+        newPage()
+        paragraph("数据图表", 16f, blue, true)
+        val data = chartData
+        reserve(142f)
+        paragraph("芯片状态占比", 12f, blue, true)
         val canvas = page!!.canvas
-        val goodEdge = margin + contentWidth * wafer.yieldRate.toFloat()
-        canvas.drawRect(margin, y, goodEdge, y + 9f, paint(1f, good))
-        canvas.drawRect(goodEdge, y, width - margin, y + 9f, paint(1f, bad))
-        y += 12f
-        paragraph("绿色为合格，红色为不合格。", 9f, muted)
-        WaferSpatialStats.calculate(wafer).rings.forEach { region ->
-            val label = "${region.name}  ${region.bad}/${region.total}"
-            val ratio = region.badRate
-            val text = ratio?.let { String.format(Locale.ROOT, "%.2f%%", it * 100) } ?: "无有效芯片"
-            val start = margin + 145f
-            val end = width - margin - 62f
-            canvas.drawText(label, margin, y + 10f, paint(9f))
-            canvas.drawRect(start, y + 2f, end, y + 10f, paint(1f, outside))
-            ratio?.let { canvas.drawRect(start, y + 2f, start + (end - start) * it.toFloat(), y + 10f, paint(1f, bad)) }
-            canvas.drawText(text, end + 8f, y + 10f, paint(9f))
-            y += 16f
+        val ring = RectF(margin + 8f, y + 3f, margin + 106f, y + 101f)
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 12f }
+        stroke.color = good
+        canvas.drawArc(ring, -90f, (data.yield * 360).toFloat(), false, stroke)
+        stroke.color = bad
+        canvas.drawArc(ring, (-90 + data.yield * 360).toFloat(), ((1 - data.yield) * 360).toFloat(), false, stroke)
+        val value = String.format(Locale.ROOT, "%.2f%%", data.yield * 100)
+        val center = paint(17f, blue, true)
+        canvas.drawText(value, ring.centerX() - center.measureText(value) / 2, ring.centerY() + 6f, center)
+        val x = margin + 140f
+        canvas.drawText("合格 ${data.good}  ($value)", x, y + 25f, paint(12f, good, true))
+        canvas.drawText("不合格 ${data.bad}  (${String.format(Locale.ROOT, "%.2f%%", (1-data.yield)*100)})", x, y + 50f, paint(12f, bad, true))
+        canvas.drawText("有效芯片 ${data.total}，非芯片区域 ${data.outside} 格", x, y + 76f, paint(10f, muted))
+        y += 122f
+        paragraph("非芯片区域不计入占比；图表与原始矩阵使用同一份统计。", 9f, muted)
+        reserve(122f)
+        paragraph("分区不合格率（横轴 0%—100%）", 12f, blue, true)
+        data.rings.forEach { region ->
+            val left = margin + 150f
+            val right = width - margin - 66f
+            val rate = region.badRate
+            page!!.canvas.drawText("${region.name}  ${region.bad}/${region.total}", margin, y + 11f, paint(9f))
+            page!!.canvas.drawRect(left, y + 2f, right, y + 11f, paint(1f, outside))
+            if (rate != null) page!!.canvas.drawRect(left, y + 2f, left + (right-left) * rate.toFloat(), y + 11f, paint(1f, bad))
+            page!!.canvas.drawText(rate?.let { String.format(Locale.ROOT, "%.2f%%", it*100) } ?: "无数据", right + 8f, y + 11f, paint(9f))
+            y += 20f
         }
-        y += 8f
+        paragraph("矩阵归一化半径以 0.35 / 0.70 分区，是几何参考，不代表实际制造边界。", 9f, muted)
+        positionChart(data.rows, "行")
+        positionChart(data.columns, "列")
+        paragraph("分布曲线横轴为网格位置，非时间趋势；无有效芯片的行列断开绘制。", 9f, muted)
+    }
+
+    private fun positionChart(series: List<PositionRate>, unit: String) {
+        reserve(160f)
+        paragraph("逐${unit}不合格率", 12f, blue, true)
+        val left = margin + 32f
+        val top = y + 6f
+        val chartWidth = contentWidth - 42f
+        val chartHeight = 72f
+        val canvas = page!!.canvas
+        for (percent in listOf(0, 50, 100)) {
+            val py = top + chartHeight * (1 - percent / 100f)
+            canvas.drawLine(left, py, left + chartWidth, py, paint(1f, Color.LTGRAY))
+            canvas.drawText("$percent%", margin, py + 3f, paint(8f, muted))
+        }
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = blue; strokeWidth = 1.5f }
+        var previous: Pair<Float, Float>? = null
+        series.forEachIndexed { index, value ->
+            val rate = value.rate
+            if (rate == null) previous = null else {
+                val x = left + chartWidth * index / (series.size - 1).coerceAtLeast(1)
+                val py = top + chartHeight * (1 - rate.toFloat())
+                previous?.let { canvas.drawLine(it.first, it.second, x, py, line) }
+                canvas.drawCircle(x, py, 1.3f, line)
+                previous = x to py
+            }
+        }
+        canvas.drawText("1$unit", left, top + chartHeight + 14f, paint(8f, muted))
+        val end = "${series.size}$unit"
+        canvas.drawText(end, left + chartWidth - paint(8f).measureText(end), top + chartHeight + 14f, paint(8f, muted))
+        y += 108f
+        val peak = series.filter { it.rate != null }.maxByOrNull { it.rate!! }
+        paragraph(peak?.let { "最高：第 ${it.number} $unit，${String.format(Locale.ROOT, "%.2f%%", it.rate!!*100)}，不合格 ${it.bad}/${it.total}。" } ?: "无有效芯片。", 9f, muted)
     }
 
     private fun waferMap() {

@@ -44,6 +44,8 @@ class ImportRepository(private val context: Context) {
     private val trainer = WaferTrainer(context)
     val trainingSummary = trainer.summary
 
+    internal suspend fun restoreTraining() = withContext(Dispatchers.IO) { trainer.restore() }
+
     internal suspend fun trainModel(uri: Uri?) = logged(LogOperation.TRAIN) {
         val custom = uri?.let { readFile(it, WaferJson.MAX_BYTES) }
         withContext(Dispatchers.Default) { trainer.train(custom) }
@@ -103,18 +105,35 @@ class ImportRepository(private val context: Context) {
     suspend fun lotDetail(lotId: Int) = withContext(Dispatchers.IO) { store.lotDetail(lotId) }
 
     suspend fun latestAnalysis(waferId: Int,predictionId: Int) = withContext(Dispatchers.IO) { store.latestAnalysis(waferId,predictionId) }
-    suspend fun analyze(wafer: WaferDetail,prediction: WaferPrediction): com.example.waferai.data.local.AiAnalysis {
+    suspend fun analyze(wafer: WaferDetail, prediction: WaferPrediction,
+                        preset: com.example.waferai.data.ai.AnalysisPreset = com.example.waferai.data.ai.AnalysisPreset.ENGINEERING,
+                        threshold: Int = 90): com.example.waferai.data.local.AiAnalysis {
         val request = withContext(Dispatchers.IO) { aiProfiles.request() }
         val profile = request.profile
-        val evidence=withContext(Dispatchers.Default) { AnalysisEvidence.create(wafer,prediction) }
-        val text = readableReply(aiClient.analyze(request.key, profile.model, evidence, profile.endpoint, profile.provider, profile.protocol))
+        val sources = withContext(Dispatchers.IO) {
+            com.example.waferai.data.ai.WaferKnowledge(context, operationLog)
+                .search("${prediction.label} ${prediction.labelZh} 缺陷")
+                .filterNot { it.title.startsWith("真实样本 ·") }.take(3).mapIndexed { index, entry ->
+                    com.example.waferai.data.ai.AnalysisSource("K${index + 1}", entry.title, entry.body, entry.source)
+                }
+        }
+        val facts = withContext(Dispatchers.Default) { AnalysisEvidence.facts(wafer, prediction, threshold) }
+        val evidence = withContext(Dispatchers.Default) { AnalysisEvidence.packet(wafer, prediction, threshold, facts, sources) }
+        val raw = aiClient.analyze(request.key, profile.model, evidence, profile.endpoint, profile.provider, profile.protocol, preset)
+        val verified = withContext(Dispatchers.Default) { com.example.waferai.data.ai.VerifiedAnalysis.render(raw, facts, sources, preset) }
         return withContext(Dispatchers.IO) {
-            store.saveAnalysis(wafer.id, prediction.id, "${profile.provider.title} · ${profile.model}", text)
+            store.saveAnalysis(wafer.id, prediction.id, "${profile.provider.title} · ${profile.model} · ${preset.title}", verified)
         }
     }
     suspend fun loadDemo(sample: DemoWafer) = logged(LogOperation.IMPORT) {
         val bytes = context.assets.open("samples/${sample.filename}").use { it.readBytes() }
         store.importJson(bytes, sample.filename)
+    }
+
+    suspend fun saveGuideFile(uri: Uri, file: com.example.waferai.data.local.GuideFile) = withContext(Dispatchers.IO) {
+        val bytes = com.example.waferai.data.local.PracticeFiles.bytes(context, file)
+        resolver.openOutputStream(uri, "w")?.use { it.write(bytes) }
+            ?: throw IOException("无法保存练习文件，请重新选择位置。")
     }
 
     suspend fun exportPdf(uri: Uri, snapshot: ReportSnapshot) = logged(LogOperation.REPORT) {

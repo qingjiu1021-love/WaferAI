@@ -1,7 +1,8 @@
 package com.example.waferai.data.analysis
 
 internal data class DefectCluster(
-    val size: Int, val firstRow: Int, val lastRow: Int, val firstCol: Int, val lastCol: Int
+    val size: Int, val firstRow: Int, val lastRow: Int, val firstCol: Int, val lastCol: Int,
+    val members: IntArray = intArrayOf()
 )
 
 internal data class WaferClusters(val count: Int, val largest: DefectCluster?) {
@@ -45,7 +46,7 @@ internal data class WaferClusters(val count: Int, val largest: DefectCluster?) {
                 }
                 count++
                 if (tail > (largest?.size ?: 0)) {
-                    largest = DefectCluster(tail, firstRow + 1, lastRow + 1, firstCol + 1, lastCol + 1)
+                    largest = DefectCluster(tail, firstRow + 1, lastRow + 1, firstCol + 1, lastCol + 1, queue.copyOf(tail))
                 }
             }
             return WaferClusters(count, largest)

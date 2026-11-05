@@ -25,10 +25,11 @@ class DeepSeekClient(
         evidence: JSONObject,
         requestEndpoint: String = endpoint,
         provider: AiProvider = AiProvider.DEEPSEEK,
-        protocol: AiProtocol = AiProtocol.OPENAI
+        protocol: AiProtocol = AiProtocol.OPENAI,
+        preset: AnalysisPreset = AnalysisPreset.ENGINEERING
     ): String = complete(
         apiKey, model, requestEndpoint, provider, protocol,
-        JSONArray().put(chatMessage("system", AnalysisEvidence.SYSTEM))
+        JSONArray().put(chatMessage("system", AnalysisEvidence.systemFor(preset)))
             .put(chatMessage("user", evidence.toString()))
     )
 

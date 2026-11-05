@@ -12,26 +12,24 @@ internal data class WaferSpatialStats(val rings: List<DieRegion>, val grid: List
         const val CENTER_BOUNDARY = 0.35
         const val MIDDLE_BOUNDARY = 0.70
 
+        fun ringAt(row: Int, col: Int, rows: Int, cols: Int): Int {
+            val dy = (row - (rows - 1) / 2.0) / (rows / 2.0)
+            val dx = (col - (cols - 1) / 2.0) / (cols / 2.0)
+            val radius = sqrt(dx * dx + dy * dy)
+            return when { radius < CENTER_BOUNDARY -> 0; radius < MIDDLE_BOUNDARY -> 1; else -> 2 }
+        }
+
         fun calculate(wafer: WaferDetail): WaferSpatialStats {
             val ringNames = listOf("矩阵中心", "矩阵中部", "矩阵边缘")
             val ringTotal = IntArray(3)
             val ringBad = IntArray(3)
             val gridTotal = IntArray(9)
             val gridBad = IntArray(9)
-            val centerX = (wafer.cols - 1) / 2.0
-            val centerY = (wafer.rows - 1) / 2.0
             for (y in 0 until wafer.rows) {
-                val dy = (y - centerY) / (wafer.rows / 2.0)
                 for (x in 0 until wafer.cols) {
                     val bin = wafer.map[y][x]
                     if (bin == 0) continue
-                    val dx = (x - centerX) / (wafer.cols / 2.0)
-                    val radius = sqrt(dx * dx + dy * dy)
-                    val ring = when {
-                        radius < CENTER_BOUNDARY -> 0
-                        radius < MIDDLE_BOUNDARY -> 1
-                        else -> 2
-                    }
+                    val ring = ringAt(y, x, wafer.rows, wafer.cols)
                     val tile = (y * 3 / wafer.rows) * 3 + x * 3 / wafer.cols
                     ringTotal[ring]++
                     gridTotal[tile]++

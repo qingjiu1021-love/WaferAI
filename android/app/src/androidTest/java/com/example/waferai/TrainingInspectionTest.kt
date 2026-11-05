@@ -39,6 +39,8 @@ class TrainingInspectionTest {
                 assertEquals(1, result.customSamples)
                 assertTrue(result.accuracy in 0.0..1.0 && result.macroF1 in 0.0..1.0)
                 val reopened = WaferTrainer(isolated)
+                assertNull(reopened.summary.value)
+                assertEquals(result, reopened.restore())
                 assertEquals(result, reopened.summary.value)
                 val trained = reopened.predict(wafer)
                 assertEquals("centroid-v1-mobile", trained.modelVersion)
@@ -49,7 +51,7 @@ class TrainingInspectionTest {
                 assertEquals(1, reopened.train(custom.toByteArray()).customSamples)
                 val conflict = custom.replace("Edge-Loc", "Center").toByteArray()
                 assertTrue(runCatching { reopened.train(conflict) }.isFailure)
-                assertEquals(1, WaferTrainer(isolated).summary.value?.customSamples)
+                assertEquals(1, WaferTrainer(isolated).restore()?.customSamples)
             }
         } finally {
             context.deleteDatabase(name)

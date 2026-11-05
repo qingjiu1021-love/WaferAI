@@ -72,6 +72,9 @@ import com.example.waferai.data.ai.AiProfilesState
 import com.example.waferai.data.ai.ChatThinking
 import com.example.waferai.data.ai.LocalWaferAssistant
 import com.example.waferai.data.ai.readableReply
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.testTag
+import com.example.waferai.data.ai.ChatTurn
 import com.example.waferai.data.ai.thinkingOptions
 import com.example.waferai.data.remote.WaferDetail
 import com.example.waferai.data.remote.WaferPrediction
@@ -86,7 +89,6 @@ import java.io.File
 
 @Composable
 internal fun ChatScreen(
-    state: ChatUiState,
     viewModel: ChatViewModel,
     profiles: AiProfilesState,
     selectedProfileId: String?,
@@ -106,6 +108,7 @@ internal fun ChatScreen(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var attach by rememberSaveable(wafer?.id, state.archive.activeId) { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var modelMenu by rememberSaveable { mutableStateOf(false) }
@@ -142,13 +145,6 @@ internal fun ChatScreen(
     val scheme = MaterialTheme.colorScheme
     val uriHandler = LocalUriHandler.current
     var sourceError by remember { mutableStateOf<String?>(null) }
-    var elapsed by remember { mutableStateOf(0L) }
-    LaunchedEffect(state.startedAt, state.pending) {
-        if (state.pending != null) while (true) {
-            elapsed = ((System.currentTimeMillis() - state.startedAt) / 1000).coerceAtLeast(0)
-            delay(1000)
-        }
-    }
     val showIntro = state.turns.isEmpty() && state.pending == null
     val disclosure = if (model == null) "基础助手提供本机规则问答与知识检索。自由对话请在模型选择中添加在线 AI。"
         else "发送时，消息与附件将交给当前 AI 服务处理，可能产生 API 费用。"
@@ -211,7 +207,7 @@ internal fun ChatScreen(
                     modifier = Modifier.padding(horizontal = 4.dp), color = scheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall)
             }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("chat-transcript"), state = list, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (showIntro) item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         StudioPanel(Modifier.fillMaxWidth(), color = scheme.primaryContainer) {
@@ -236,20 +232,9 @@ internal fun ChatScreen(
                         }
                     }
                 }
-                items(state.turns) { turn ->
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ChatBubble(if (turn.waferSummary == null) "我" else "我 · 已附晶圆摘要",
-                            turn.question + turn.attachmentName?.let { "\n附件：$it" }.orEmpty(), user = true)
-                        ChatBubble(turn.model, turn.reply, user = false)
-                        turn.searchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant) }
-                        if (!turn.sources.isNullOrEmpty()) StudioPanel(Modifier.fillMaxWidth()) {
-                            Text("联网来源 · 网页摘要", style = MaterialTheme.typography.labelLarge)
-                            turn.sources.orEmpty().forEachIndexed { index, source ->
-                                TextButton({ runCatching { uriHandler.openUri(source.url) }.onFailure { sourceError = "无法打开来源链接。" } }) {
-                                    Text("[${index + 1}] ${source.title}", maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                        }
+                items(state.turns, key = { requireNotNull(it.id) }, contentType = { "chat-turn" }) { turn ->
+                    ChatTurnItem(turn) { url ->
+                        runCatching { uriHandler.openUri(url) }.onFailure { sourceError = "无法打开来源链接。" }
                     }
                 }
                 state.pending?.let { question ->
@@ -275,7 +260,7 @@ internal fun ChatScreen(
                 }
             }
             if (state.busy) {
-                state.stage?.let { Text("$it · 已用 ${elapsed} 秒", style = MaterialTheme.typography.labelMedium, color = scheme.primary) }
+                ChatProgress(state.stage, state.startedAt, state.pending != null)
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (state.stage == "等待模型思考与回复") Text("当前接口未提供思考百分比，显示实际等待时间。", style = MaterialTheme.typography.bodySmall)
                 state.searchNotice?.let { Text(it, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
@@ -447,6 +432,36 @@ internal fun ChatScreen(
             confirmButton = { TextButton({ confirmClear = false; viewModel.clear() }) { Text("确认清空") } },
             dismissButton = { TextButton({ confirmClear = false }) { Text("取消") } }
         )
+    }
+}
+
+@Composable
+private fun ChatProgress(stage: String?, startedAt: Long, pending: Boolean) {
+    var elapsed by remember(startedAt) { mutableStateOf(0L) }
+    LaunchedEffect(startedAt, pending) {
+        if (pending) while (true) {
+            elapsed = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0)
+            delay(1000)
+        }
+    }
+    stage?.let { Text("$it · 已用 $elapsed 秒", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+}
+
+@Composable
+private fun ChatTurnItem(turn: ChatTurn, onSource: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ChatBubble(if (turn.waferSummary == null) "我" else "我 · 已附晶圆摘要",
+            turn.question + turn.attachmentName?.let { "\n附件：$it" }.orEmpty(), user = true)
+        ChatBubble(turn.model, turn.reply, user = false)
+        turn.searchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (!turn.sources.isNullOrEmpty()) StudioPanel(Modifier.fillMaxWidth()) {
+            Text("联网来源 · 网页摘要", style = MaterialTheme.typography.labelLarge)
+            turn.sources.orEmpty().forEachIndexed { index, source ->
+                TextButton({ onSource(source.url) }) {
+                    Text("[${index + 1}] ${source.title}", maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }
 

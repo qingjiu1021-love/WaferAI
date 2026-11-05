@@ -85,7 +85,8 @@ data class Appearance(
     val language: AppLanguage = AppLanguage.CHINESE,
     val startTab: StartTab = StartTab.WAFER,
     val chatProfileId: String? = null,
-    val chatThinking: Map<String, ChatThinking> = emptyMap()
+    val chatThinking: Map<String, ChatThinking> = emptyMap(),
+    val analysisPreset: com.example.waferai.data.ai.AnalysisPreset = com.example.waferai.data.ai.AnalysisPreset.ENGINEERING
 )
 
 internal val KnowledgeIntervals = listOf(1, 3, 6, 12, 24, 48, 168)
@@ -105,6 +106,7 @@ class AppearancePreferences(context: Context) {
         }
         return Appearance(
             mode = preferences.option("mode", ThemeMode.SYSTEM),
+            analysisPreset = preferences.option("analysis_preset", com.example.waferai.data.ai.AnalysisPreset.ENGINEERING),
             accent = preferences.option("accent", ThemeAccent.BLUE),
             pureBlack = preferences.getBoolean("pure_black", false),
             palette = preferences.option("palette", PaletteStyle.VIVID),
@@ -138,6 +140,7 @@ class AppearancePreferences(context: Context) {
     fun save(appearance: Appearance) {
         val saved = preferences.edit()
             .putString("mode", appearance.mode.name)
+            .putString("analysis_preset", appearance.analysisPreset.name)
             .putString("accent", appearance.accent.name)
             .putBoolean("pure_black", appearance.pureBlack)
             .putString("palette", appearance.palette.name)

@@ -32,8 +32,9 @@ internal class WaferTrainer(private val context: Context) {
     private val file = AtomicFile(File(context.noBackupFilesDir, "wafer-trained-model-v1.json"))
     private val lock = Mutex()
     private val gson = Gson()
-    @Volatile private var current = load()
-    private val mutable = MutableStateFlow(current?.summary)
+    @Volatile private var current: Model? = null
+    @Volatile private var loaded = false
+    private val mutable = MutableStateFlow<TrainingSummary?>(null)
     val summary = mutable.asStateFlow()
 
     private data class Sample(val label: Int, val bins: ByteArray)
@@ -42,7 +43,18 @@ internal class WaferTrainer(private val context: Context) {
     private data class SavedSample(val label: Int, val bins: String)
     private data class Model(val params: Parameters, val summary: TrainingSummary, val saved: List<SavedSample>? = null)
 
+    /** Called on a worker, never deserialize saved training samples in the app constructor. */
+    @Synchronized fun restore(): TrainingSummary? {
+        if (!loaded) {
+            current = load()
+            loaded = true
+            mutable.value = current?.summary
+        }
+        return current?.summary
+    }
+
     suspend fun train(custom: ByteArray?): TrainingSummary = lock.withLock {
+        restore()
         val job = currentCoroutineContext()
         val metadata = context.assets.open("models/phone-training-wm811k.json").bufferedReader().use {
             JsonParser.parseReader(it).asJsonObject
@@ -125,6 +137,7 @@ internal class WaferTrainer(private val context: Context) {
     }
 
     fun predict(wafer: WaferDetail): WaferPrediction {
+        restore()
         val params = requireNotNull(current?.params) { "请先在工具中训练手机模型。" }
         val scores = scores(params, MobilePreprocessing.bins(wafer.map))
         val index = scores.indices.maxBy { scores[it] }
