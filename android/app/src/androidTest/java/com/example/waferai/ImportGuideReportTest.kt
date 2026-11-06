@@ -39,12 +39,19 @@ class ImportGuideReportTest {
         compose.setContent { WaferAITheme {
             WaferImportGuide(GuideUiState(), false, { saved = it }, {}, { data = true }, { image = true }, {})
         } }
+        compose.onNodeWithText("如何获取晶圆源文件").assertIsDisplayed()
+        compose.onNodeWithText("导出单片文件").assertIsDisplayed()
         compose.onNodeWithText("保存 JSON 练习文件").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(GuideFile.JSON, saved) }
         repeat(2) { compose.onNodeWithText("下一步").performClick() }
         compose.onNodeWithText("选择数据文件并导入").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(data) }
         compose.onNodeWithText("晶圆图片").performClick()
+        val previewDescription = "WM-811K 中心型晶圆网格，53 行 58 列"
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription(previewDescription).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription(previewDescription).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("保存晶圆练习图片").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(GuideFile.IMAGE, saved) }
         repeat(2) { compose.onNodeWithText("下一步").performClick() }

@@ -210,7 +210,7 @@ fun WaferHomeScreen(
                             TextButton(onSelectImage, enabled = !busy) { Text("导入图片") }
                             TextButton({ showDemoPicker = true }, enabled = !busy) { Text("演示样本") }
                         }
-                        TextButton({ showGuide = true }, enabled = !busy) { Text("一键导入晶圆指引") }
+                        TextButton({ showGuide = true }, enabled = !busy) { Text(WaferSourceGuideTitle) }
                         if (wafer.lotCode == "IMAGE") Text("良率由图片网格推算，请对照原图核对行列和颜色。", style = MaterialTheme.typography.bodySmall)
                     }
                     if (displayedPanel == WaferPanel.DETECT) {
@@ -377,6 +377,6 @@ private fun WorkspaceIntro(onImport: () -> Unit, onImage: () -> Unit, onDemo: ()
         ActionTile("识别晶圆图片", "选择图片并校准网格", StudioIcon.PHOTO, onImage, Modifier.weight(1f), enabled)
         ActionTile("载入演示晶圆", "27 张真实样本与 3 张人工演示", StudioIcon.WAFER, onDemo, Modifier.weight(1f), enabled)
     }
-    TextButton(onGuide, enabled = enabled) { Text("一键导入晶圆指引") }
+    TextButton(onGuide, enabled = enabled) { Text(WaferSourceGuideTitle) }
 }
 

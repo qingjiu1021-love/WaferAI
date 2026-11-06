@@ -1,10 +1,14 @@
-# WaferAI 4.10.4
+# WaferAI 4.10.5
 
-Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 46。
+Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 47。
 
 [下载安装包](https://github.com/qingjiu1021-love/WaferAI/releases/latest) · [账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)
 
 支持 Android 8.0 及以上的 arm64-v8a / x86_64。手机本地晶圆分析无需电脑服务，测试包沿用此前签名，可直接覆盖安装，无需先卸载。
+
+## 4.10.5 本地更新
+
+晶圆页新增「如何获取晶圆源文件」图文指引。数据文件路径展示单片导出、JSON 示例与手机文件选择器。晶圆图片路径使用同一张 WM-811K 练习图说明获取、裁剪、网格校准和结果核对。可在指引中保存练习文件或打开公开来源。
 
 ## 4.10.4 本地更新
 
