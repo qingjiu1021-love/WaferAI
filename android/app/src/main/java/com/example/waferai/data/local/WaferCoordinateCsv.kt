@@ -1,13 +1,20 @@
 package com.example.waferai.data.local
 
+import java.io.Reader
+
 private const val MatrixLimit = 512
 private val RequiredColumns = setOf("lot_code", "wafer_code", "row", "col", "status")
 
 internal object WaferCoordinateCsv {
-    fun parse(bytes: ByteArray, filename: String): ParsedWafer {
-        val lines = decodeWaferText(bytes).lineSequence().iterator()
+    const val MAX_BYTES = 144 * 1024 * 1024
+
+    fun parse(bytes: ByteArray, filename: String): ParsedWafer =
+        parse(decodeWaferText(bytes).reader(), filename)
+
+    fun parse(reader: Reader, filename: String, checkCancelled: () -> Unit = {}): ParsedWafer {
+        val lines = boundedLines(reader).iterator()
         require(lines.hasNext()) { "CSV 缺少表头。" }
-        val header = fields(lines.next(), 1).map { it.lowercase() }
+        val header = fields(lines.next().removePrefix("\uFEFF"), 1).map { it.lowercase() }
         require(header.size == RequiredColumns.size && header.toSet() == RequiredColumns) {
             "CSV 表头必须包含 lot_code、wafer_code、row、col、status 五列。"
         }
@@ -24,6 +31,7 @@ internal object WaferCoordinateCsv {
         var cols = 0
         var lineNumber = 1
         while (lines.hasNext()) {
+            checkCancelled()
             val line = lines.next()
             lineNumber++
             if (line.isBlank()) continue
@@ -54,6 +62,28 @@ internal object WaferCoordinateCsv {
             List(cols) { col -> (cells[row * MatrixLimit + col].toInt() - 1).coerceAtLeast(0) }
         }
         return parsedWafer(lot, wafer, map, filename)
+    }
+
+    private fun boundedLines(reader: Reader) = sequence {
+        val buffer = CharArray(8192)
+        val line = StringBuilder()
+        var afterCr = false
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) break
+            for (index in 0 until count) {
+                val char = buffer[index]
+                if (char == '\r' || (char == '\n' && !afterCr)) {
+                    yield(line.toString())
+                    line.setLength(0)
+                } else if (char != '\n') {
+                    require(line.length < 1024) { "CSV 单行超出坐标数据长度限制。" }
+                    line.append(char)
+                }
+                afterCr = char == '\r'
+            }
+        }
+        if (line.isNotEmpty()) yield(line.toString())
     }
 
     private fun fields(line: String, lineNumber: Int): List<String> = buildList {

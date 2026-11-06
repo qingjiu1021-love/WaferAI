@@ -14,6 +14,10 @@ import com.example.waferai.data.local.OperationLog
 import com.example.waferai.data.local.WaferImage
 import com.example.waferai.data.local.WaferImageOptions
 import com.example.waferai.data.local.WaferParquet
+import com.example.waferai.data.local.WaferCoordinateCsv
+import com.example.waferai.data.local.WaferFileFormat
+import com.example.waferai.data.local.WaferFileWriter
+import com.example.waferai.data.local.ParsedWafer
 import com.example.waferai.data.local.WaferTestData
 import com.example.waferai.data.local.DemoWafer
 import com.example.waferai.data.local.MobilePredictor
@@ -33,6 +37,8 @@ import java.io.IOException
 import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
+import java.io.InputStreamReader
+import java.nio.charset.CodingErrorAction
 
 class ImportRepository(private val context: Context) {
     private val resolver = context.contentResolver
@@ -88,7 +94,7 @@ class ImportRepository(private val context: Context) {
 
     suspend fun restoreBackup(uri: Uri): Int = withContext(Dispatchers.IO) {
         val source = resolver.openInputStream(uri) ?: throw IOException("无法打开备份文件。")
-        BoundedBackupInput(source).bufferedReader(Charsets.UTF_8).use { store.restoreBackup(it) { ensureActive() } }
+        BoundedInput(source, BackupSizeLimit).bufferedReader(Charsets.UTF_8).use { store.restoreBackup(it) { ensureActive() } }
     }
 
     suspend fun exportCsv(uri: Uri, query: WaferCsvQuery): Int = withContext(Dispatchers.IO) {
@@ -143,20 +149,55 @@ class ImportRepository(private val context: Context) {
     }
 
     suspend fun importFile(uri: Uri): ImportResponse = logged(LogOperation.IMPORT) {
+        store.saveParsed(readWaferFile(uri))
+    }
+
+    internal suspend fun readForConversion(uri: Uri): WaferDetail = withContext(Dispatchers.IO) {
+        readWaferFile(uri).detail
+    }
+
+    private suspend fun readWaferFile(uri: Uri): ParsedWafer {
         val name = displayName(uri) ?: "wafer.json"
-        val format = name.substringAfterLast('.').lowercase()
+        val format = WaferFileFormat.fromFilename(name)
+            ?: throw IllegalArgumentException("请选择 STDF、ATDF、CSV、JSON 或 Parquet 晶圆数据。")
+        if (format == WaferFileFormat.CSV) {
+            val source = resolver.openInputStream(uri) ?: throw IOException("无法打开文件，请重新选择。")
+            val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+            val job = kotlinx.coroutines.currentCoroutineContext()
+            return InputStreamReader(BoundedInput(source, WaferCoordinateCsv.MAX_BYTES.toLong()), decoder).use { reader ->
+                WaferCoordinateCsv.parse(reader, name) { job.ensureActive() }
+            }
+        }
         val limit = when (format) {
-            "json", "csv", "cvs" -> WaferJson.MAX_BYTES
-            "stdf", "std", "atdf", "adtf", "parquet" -> WaferTestData.MAX_BYTES
-            else -> throw IllegalArgumentException("请选择 STDF、ATDF、CSV、JSON 或 Parquet 晶圆数据。")
+            WaferFileFormat.JSON -> WaferJson.MAX_BYTES
+            WaferFileFormat.ATDF -> WaferTestData.MAX_ATDF_BYTES
+            else -> WaferTestData.MAX_BYTES
         }
         val bytes = readFile(uri, limit)
-        when (format) {
-            "csv", "cvs" -> store.importCsv(bytes, name)
-            "stdf", "std" -> store.saveParsed(WaferTestData.stdf(bytes, name))
-            "atdf", "adtf" -> store.saveParsed(WaferTestData.atdf(bytes, name))
-            "parquet" -> store.saveParsed(WaferParquet.parse(context, bytes, name))
-            else -> store.importJson(bytes, name)
+        return when (format) {
+            WaferFileFormat.STDF -> WaferTestData.stdf(bytes, name)
+            WaferFileFormat.ATDF -> WaferTestData.atdf(bytes, name)
+            WaferFileFormat.PARQUET -> WaferParquet.parse(context, bytes, name)
+            else -> WaferJson.parse(bytes, name)
+        }
+    }
+
+    internal suspend fun convertFile(uri: Uri, wafer: WaferDetail, format: WaferFileFormat) = withContext(Dispatchers.IO) {
+        val temporary = File.createTempFile("wafer-conversion-", ".${format.extension}", context.cacheDir)
+        val job = kotlinx.coroutines.currentCoroutineContext()
+        try {
+            when (format) {
+                WaferFileFormat.JSON -> temporary.writeText(WaferFileWriter.json(wafer))
+                WaferFileFormat.CSV -> temporary.bufferedWriter().use { WaferFileWriter.csv(wafer, it) { job.ensureActive() } }
+                WaferFileFormat.ATDF -> temporary.bufferedWriter().use { WaferFileWriter.atdf(wafer, it) { job.ensureActive() } }
+                WaferFileFormat.STDF -> temporary.outputStream().buffered().use { WaferFileWriter.stdf(wafer, it) { job.ensureActive() } }
+                WaferFileFormat.PARQUET -> temporary.writeBytes(WaferParquet.write(context, wafer))
+            }
+            ensureActive()
+            val output = resolver.openOutputStream(uri, "wt") ?: throw IOException("无法打开保存位置。")
+            output.use { destination -> temporary.inputStream().use { it.copyTo(destination) } }
+        } finally {
+            temporary.delete()
         }
     }
 
@@ -202,7 +243,7 @@ class ImportRepository(private val context: Context) {
 
 private const val BackupSizeLimit = 128L * 1024 * 1024
 
-private class BoundedBackupInput(input: InputStream) : FilterInputStream(input) {
+private class BoundedInput(input: InputStream, private val limit: Long) : FilterInputStream(input) {
     private var count = 0L
 
     override fun read(): Int = super.read().also { if (it >= 0) add(1) }
@@ -212,6 +253,6 @@ private class BoundedBackupInput(input: InputStream) : FilterInputStream(input) 
 
     private fun add(bytes: Int) {
         count += bytes
-        require(count <= BackupSizeLimit)
+        require(count <= limit) { "文件不能超过 ${limit / (1024 * 1024)} MB。" }
     }
 }

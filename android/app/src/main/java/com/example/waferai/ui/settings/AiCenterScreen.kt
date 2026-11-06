@@ -1,5 +1,6 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll

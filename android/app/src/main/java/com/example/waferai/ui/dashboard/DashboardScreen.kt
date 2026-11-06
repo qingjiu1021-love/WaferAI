@@ -1,5 +1,6 @@
 package com.example.waferai.ui.dashboard
 
+import com.example.waferai.ui.theme.GlassSegmentedTabs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,8 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -53,11 +52,8 @@ fun StatisticsScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        StudioHeader("数据中心", "WAFERAI / INSIGHTS", StudioIcon.DATA)
-        TabRow(0, containerColor = scheme.surface) {
-            Tab(true, {}, text = { Text("数据总览") })
-            Tab(false, onHistory, text = { Text("历史记录") })
-        }
+        StudioHeader("数据中心", "WAFERAI / INSIGHTS", StudioIcon.DATA, compact = true)
+        GlassSegmentedTabs(listOf("数据总览", "历史记录"), 0, { if (it == 1) onHistory() })
         StudioPanel(Modifier.fillMaxWidth(), color = scheme.primaryContainer) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 data?.yieldRate?.let { YieldRing(it, diameter = 80.dp) }

@@ -5,6 +5,7 @@ import java.nio.ByteOrder
 
 internal object WaferTestData {
     const val MAX_BYTES = 8 * 1024 * 1024
+    const val MAX_ATDF_BYTES = 16 * 1024 * 1024
 
     fun stdf(bytes: ByteArray, filename: String): ParsedWafer {
         require(bytes.size >= 6 && bytes[2] == 0.toByte() && bytes[3] == 10.toByte() &&
@@ -26,6 +27,7 @@ internal object WaferTestData {
             val start = buffer.position()
             when {
                 type == 1 && subtype == 10 -> wafer.lot = readCn(bytes, start, length, 15)
+                type == 50 && subtype == 30 -> wafer.note(readCn(bytes, start, length, 0))
                 type == 2 && subtype == 10 -> {
                     require(length >= 6) { "STDF WIR 记录不完整。" }
                     wafer.begin(readCn(bytes, start, length, 6))
@@ -55,6 +57,7 @@ internal object WaferTestData {
         while (lines.hasNext()) {
             val line = lines.next()
             val record = line.substringBefore(':')
+            if (record == "DTR") { wafer.note(line.substringAfter(':')); continue }
             if (record != "MIR" && record != "WIR" && record != "WRR" && record != "PRR") continue
             val fields = line.substringAfter(':').split('|', limit = 13)
             when (record) {
@@ -87,6 +90,13 @@ internal object WaferTestData {
         private var started = false
         private var ended = false
         private val dies = HashMap<Pair<Int, Int>, Int>()
+        private val notes = ArrayList<String>(5)
+
+        fun note(text: String) {
+            if (!text.startsWith(TestGridNotes.Prefix)) return
+            require(text.length <= 255 && notes.size < 5) { "晶圆网格扩展记录异常。" }
+            notes.add(text)
+        }
 
         fun begin(id: String) {
             require(!started && !ended && dies.isEmpty()) { "测试数据文件只能包含一张晶圆。" }
@@ -112,6 +122,21 @@ internal object WaferTestData {
 
         fun result(): ParsedWafer {
             require(dies.isNotEmpty()) { "未找到带有效坐标和合格状态的芯片记录。" }
+            val gridPrefix = TestGridNotes.Prefix + "grid:"
+            val grids = notes.filter { it.startsWith(gridPrefix) }
+            if (grids.isNotEmpty()) {
+                require(grids.size == 1) { "晶圆网格尺寸记录重复。" }
+                val dimensions = grids.single().removePrefix(gridPrefix).split(':')
+                val rows = dimensions.getOrNull(0)?.toIntOrNull()
+                val cols = dimensions.getOrNull(1)?.toIntOrNull()
+                require(dimensions.size == 2 && rows != null && cols != null && rows in 1..512 && cols in 1..512 &&
+                    dies.keys.all { (x,y) -> x in 1..cols && y in 1..rows }) { "晶圆网格扩展记录与坐标不符。" }
+                val map = List(rows) { row -> List(cols) { col -> dies[col + 1 to rows - row] ?: 0 } }
+                return parsedWafer(
+                    validateWaferCode(TestGridNotes.original(notes, "lot", lot), "lot_code"),
+                    validateWaferCode(TestGridNotes.original(notes, "wafer", code), "wafer_code"), map, filename
+                )
+            }
             val minX = dies.keys.minOf { it.first }
             val maxX = dies.keys.maxOf { it.first }
             val minY = dies.keys.minOf { it.second }

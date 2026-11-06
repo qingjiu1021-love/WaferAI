@@ -1,5 +1,6 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -30,7 +31,7 @@ internal fun ProfileScreen(overview: WaferOverview?, modelCount: Int,
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        StudioHeader("我的", "WAFERAI / MY WORKSPACE", StudioIcon.PERSON)
+        StudioHeader("我的", "WAFERAI / MY WORKSPACE", StudioIcon.PERSON, compact = true)
         StudioPanel(Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 UserAvatar(profile)
@@ -40,8 +41,8 @@ internal fun ProfileScreen(overview: WaferOverview?, modelCount: Int,
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                androidx.compose.material3.TextButton(onEditProfile) { Text("编辑头像与昵称") }
-                androidx.compose.material3.TextButton(onAccount) { Text(if (account == null) "登录 / 注册" else "管理账号") }
+                TextButton(onEditProfile) { Text("编辑头像与昵称") }
+                TextButton(onAccount) { Text(if (account == null) "登录 / 注册" else "管理账号") }
             }
         }
         SectionHeading("我的工作空间")

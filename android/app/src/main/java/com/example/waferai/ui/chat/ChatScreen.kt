@@ -1,5 +1,9 @@
 package com.example.waferai.ui.chat
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
+import com.example.waferai.ui.theme.GlassIconButton as IconButton
+import com.example.waferai.ui.theme.GlassFilledIconButton as FilledIconButton
+import com.example.waferai.ui.theme.GlassDropdownMenu as DropdownMenu
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,8 +14,6 @@ import androidx.compose.foundation.layout.widthIn
 import com.example.waferai.ui.theme.LocalAppLanguage
 import com.example.waferai.ui.theme.localizedCore
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
@@ -37,7 +39,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +48,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
 import com.example.waferai.ui.theme.BackButton
 import com.example.waferai.ui.theme.UiText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -106,7 +106,8 @@ internal fun ChatScreen(
     memoryEnabled: Boolean,
     onMemoryEnabled: (Boolean) -> Unit,
     onBack: (() -> Unit)?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    active: Boolean = true
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var attach by rememberSaveable(wafer?.id, state.archive.activeId) { mutableStateOf(false) }
@@ -149,13 +150,27 @@ internal fun ChatScreen(
     val disclosure = if (model == null) "基础助手提供本机规则问答与知识检索。自由对话请在模型选择中添加在线 AI。"
         else "发送时，消息与附件将交给当前 AI 服务处理，可能产生 API 费用。"
     val historyNote = if (!memoryEnabled) "记忆已关闭。" else "记忆已开启。本机保留最近 30 轮，可在右上角编辑记忆。"
-    LaunchedEffect(state.archive.activeId, state.turns.lastOrNull(), state.pending) {
+    LaunchedEffect(active, state.archive.activeId, state.turns.lastOrNull(), state.pending) {
+        if (!active) return@LaunchedEffect
         if (state.pending != null) list.scrollToItem(state.turns.size)
         else list.scrollToItem(state.turns.lastIndex.coerceAtLeast(0))
     }
     val historyLabel = localizedCore("对话历史", LocalAppLanguage.current)
         ?: if (english) "Chat history" else "对话历史"
-    BackHandler(attachMenu) { attachMenu = false }
+    LaunchedEffect(active) {
+        if (!active) {
+            attachMenu = false
+            modelMenu = false
+            fileActions = false
+            thinkingDialog = false
+            memoryDialog = false
+            textDialog = false
+            confirmClear = false
+            deleteId = null
+            drawer.snapTo(DrawerValue.Closed)
+        }
+    }
+    BackHandler(active && attachMenu) { attachMenu = false }
     ModalNavigationDrawer(
         modifier = modifier.fillMaxSize().imePadding(),
         drawerState = drawer,
@@ -196,7 +211,7 @@ internal fun ChatScreen(
                 }, modifier = Modifier.semantics { contentDescription = historyLabel }) {
                     StudioGlyph(StudioIcon.MENU, Modifier.size(22.dp), LocalContentColor.current)
                 }
-                StudioHeader("AI 对话", "WAFERAI / ASSISTANT", StudioIcon.AI, Modifier.weight(1f))
+                StudioHeader("AI 对话", "WAFERAI / ASSISTANT", StudioIcon.AI, Modifier.weight(1f), compact = true)
                 IconButton({ memoryDialog = true }, enabled = !state.busy,
                     modifier = Modifier.semantics { contentDescription = "AI 记忆" }) {
                     StudioGlyph(StudioIcon.MEMORY, Modifier.size(22.dp), if (memoryEnabled) scheme.primary else scheme.onSurfaceVariant)
@@ -309,12 +324,11 @@ internal fun ChatScreen(
                                 onThinking = { attachMenu = false; focus.clearFocus(); thinkingDialog = true }
                             )
                         }
-                        IconButton(viewModel::toggleWebSearch, enabled = !state.busy,
+                        IconButton(viewModel::toggleWebSearch, enabled = !state.busy, selected = state.webSearch,
                             modifier = Modifier.semantics {
                                 contentDescription = if (state.webSearch) "联网搜索已开启" else "联网搜索"
                                 stateDescription = if (state.webSearch) "已开启" else "已关闭"
-                            }.clip(RoundedCornerShape(50)).background(
-                                if (state.webSearch) scheme.primary.copy(alpha = 0.12f) else Color.Transparent)) {
+                            }) {
                             StudioGlyph(StudioIcon.LANGUAGE, Modifier.size(21.dp),
                                 if (state.webSearch) scheme.primary else scheme.onSurfaceVariant)
                         }

@@ -1,5 +1,7 @@
 package com.example.waferai.ui.importdata
 
+import com.example.waferai.ui.theme.GlassSegmentedTabs
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,10 +40,10 @@ internal fun WaferImportGuide(state: GuideUiState, busy: Boolean, onSave: (Guide
                 Text("一键导入晶圆指引", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 TextButton(onDismiss) { Text("关闭") }
             }
-            TabRow(if (images) 1 else 0) {
-                Tab(!images, { images = false; step = 0 }, text = { Text("数据文件") })
-                Tab(images, { images = true; step = 0 }, text = { Text("晶圆图片") })
-            }
+            GlassSegmentedTabs(listOf("数据文件", "晶圆图片"), if (images) 1 else 0, { index ->
+                images = index == 1
+                step = 0
+            })
             val titles = if (images) listOf("获取晶圆图片", "裁剪与确认网格", "上传图片并校准", "识别与查看报告")
                 else listOf("获取晶圆数据", "整理支持的格式", "传到手机并导入", "检测与查看报告")
             Text("${step + 1} / 4 · ${titles[step]}", style = MaterialTheme.typography.titleMedium)
@@ -58,7 +60,7 @@ internal fun WaferImportGuide(state: GuideUiState, busy: Boolean, onSave: (Guide
                         Text("Kaggle 如要求登录，请先在浏览器登录后下载 ZIP 并解压。里面的 LSWMD.pkl 需在电脑转换为单张晶圆 JSON；手机练习可直接使用上方文件。", style = MaterialTheme.typography.bodySmall)
                     }
                     !images && step == 1 -> {
-                        Text("每个文件一张晶圆。JSON / CSV 最大 2 MB；STDF / ATDF / Parquet 最大 8 MB。矩阵最大 512 行 × 512 列。")
+                        Text("每个文件一张晶圆，最大 512 行 × 512 列。JSON 限 2 MB，STDF 和 Parquet 限 8 MB，ATDF 限 16 MB，CSV 限 144 MB。")
                         StudioPanel(Modifier.fillMaxWidth()) {
                             Text("JSON 格式", style = MaterialTheme.typography.titleSmall)
                             Text("只包含 lot_code、wafer_code 和 map。0 为非芯片区域，1 为合格，2 为不合格。")

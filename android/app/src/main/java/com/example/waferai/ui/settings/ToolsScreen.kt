@@ -1,5 +1,7 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassFilterChip as FilterChip
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,10 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +47,7 @@ internal fun ToolsScreen(onLogs: () -> Unit, onKnowledge: () -> Unit, onTrain: (
                          modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StudioHeader("工具箱", "WAFERAI / TOOLKIT", StudioIcon.TOOLS)
+        StudioHeader("工具箱", "WAFERAI / TOOLKIT", StudioIcon.TOOLS, compact = true)
         StudioPanel(Modifier.fillMaxWidth(), MaterialTheme.colorScheme.primaryContainer) {
             StatusPill("专业工作流")
             Text("让分析更进一步", style = MaterialTheme.typography.headlineSmall)

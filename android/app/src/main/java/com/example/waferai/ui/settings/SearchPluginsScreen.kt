@@ -1,5 +1,9 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassFilterChip as FilterChip
+import com.example.waferai.ui.theme.GlassButton as Button
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
+import com.example.waferai.ui.theme.GlassOutlinedButton as OutlinedButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*

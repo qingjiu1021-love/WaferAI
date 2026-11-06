@@ -1,9 +1,6 @@
 package com.example.waferai
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.layout.heightIn
 
 import android.os.Bundle
 import com.example.waferai.ui.account.AccountViewModel
@@ -18,16 +15,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -40,25 +27,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import com.example.waferai.ui.theme.UiText as Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -67,6 +53,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.core.view.WindowCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,6 +70,15 @@ import com.example.waferai.ui.history.HistoryViewModel
 import com.example.waferai.ui.history.WaferCompareScreen
 import com.example.waferai.ui.importdata.ImportViewModel
 import com.example.waferai.ui.importdata.WaferHomeScreen
+import com.example.waferai.ui.importdata.WaferConversionDialog
+import com.example.waferai.ui.theme.DockBackdrop
+import com.example.waferai.ui.theme.GlassTabs
+import com.example.waferai.ui.theme.PrimaryTabHost
+import com.example.waferai.ui.theme.StartupTransition
+import com.example.waferai.ui.theme.TabNavigation
+import com.example.waferai.ui.theme.recordDockBackdrop
+import com.example.waferai.ui.theme.rememberDockBackdrop
+import com.example.waferai.ui.theme.sampleDockBackdrop
 import com.example.waferai.ui.lots.LotScreen
 import com.example.waferai.ui.lots.LotViewModel
 import com.example.waferai.ui.settings.AiCenterScreen
@@ -107,7 +103,6 @@ import com.example.waferai.ui.theme.StartTab
 import com.example.waferai.ui.theme.AppearancePreferences
 import com.example.waferai.ui.theme.Appearance
 import com.example.waferai.ui.theme.BottomBarStyle
-import com.example.waferai.ui.theme.TabMotion
 import com.example.waferai.ui.theme.WaferAITheme
 import com.example.waferai.ui.theme.glassSurface
 import com.example.waferai.ui.theme.GlassLevel
@@ -125,6 +120,14 @@ private val tabs = listOf(
     Page.PROFILE to "我的"
 )
 
+private val tabLabels = tabs.map { it.second }
+private val primaryPages = tabs.map { it.first }
+
+@Composable
+private fun PageEffects(page: State<Page>, effects: @Composable (Page) -> Unit) {
+    effects(page.value)
+}
+
 private fun StartTab.page(): Page = when (this) {
     StartTab.WAFER -> Page.WAFER
     StartTab.DATA -> Page.DATA
@@ -133,45 +136,36 @@ private fun StartTab.page(): Page = when (this) {
     StartTab.PROFILE -> Page.PROFILE
 }
 
-private val tabEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
-
 @Composable
-private fun WaferBottomBar(appearance: Appearance, selectedTab: Page, onSelect: (Page) -> Unit) {
+private fun WaferBottomBar(
+    appearance: Appearance,
+    selectedTab: Page,
+    backdrop: DockBackdrop?,
+    onSelect: (Page) -> Unit
+) {
     val scheme = MaterialTheme.colorScheme
-    val floating = appearance.bottomBar == BottomBarStyle.FLOATING
     val shape = RoundedCornerShape(50)
-    val modifier = if (floating) {
-        Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
-            .padding(horizontal = 18.dp, vertical = 8.dp)
+    val floating = appearance.bottomBar == BottomBarStyle.FLOATING
+    val base = Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
+    val surface = if (floating) {
+        Modifier.clip(shape)
+            .sampleDockBackdrop(backdrop, appearance.glass)
             .glassSurface(scheme.surfaceContainer, scheme.primary, shape,
                 appearance.glass, scheme.surface.luminance() < 0.4f, appearance.navOpacity / 100f)
-    } else Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
-        .background(scheme.surfaceContainer)
-    androidx.compose.foundation.layout.Row(
-        modifier.heightIn(min = 68.dp).padding(horizontal = 5.dp, vertical = 4.dp).selectableGroup(),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        tabs.forEachIndexed { index, (destination, label) ->
-            val selected = selectedTab == destination
-            val foreground = if (selected) scheme.primary else scheme.onSurfaceVariant
-            val pill by androidx.compose.animation.animateColorAsState(
-                if (selected) scheme.primary.copy(alpha = 0.13f) else Color.Transparent,
-                animationSpec = tween(150), label = "navigation selection")
-            androidx.compose.foundation.layout.Column(
-                Modifier.weight(1f).clip(shape).background(pill)
-                    .selectable(selected, role = androidx.compose.ui.semantics.Role.Tab, onClick = { onSelect(destination) })
-                    .heightIn(min = 58.dp).padding(horizontal = 3.dp, vertical = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
-            ) {
-                TabIcon(index, foreground)
-                Text(label, maxLines = 1, color = foreground,
-                    style = scheme.let { androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium) })
-            }
-        }
+    } else {
+        Modifier.background(scheme.surfaceContainer)
     }
+    GlassTabs(
+        labels = tabLabels,
+        selectedIndex = tabs.indexOfFirst { it.first == selectedTab }.coerceAtLeast(0),
+        onSelect = { onSelect(tabs[it].first) },
+        modifier = if (floating) base.padding(horizontal = 21.dp, vertical = 8.dp) else base,
+        surface = surface,
+        floating = floating,
+        dragEnabled = true,
+        onPressChanged = { backdrop?.pressed = it },
+        icon = { index, color -> TabIcon(index, color) }
+    )
 }
 
 class MainActivity : ComponentActivity() {
@@ -198,15 +192,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val animateLaunch = !launchShown && savedInstanceState == null && ValueAnimator.areAnimatorsEnabled()
         launchShown = true
-        var launchReady by mutableStateOf(false)
         var launchVisible by mutableStateOf(animateLaunch)
-        // Release on the first drawable app frame. Never wait for networking, a model,
-        // or a branding timer; the existing home screen initializes behind the overlay.
-        splashScreen.setOnExitAnimationListener { provider ->
-            launchReady = true
-            provider.remove()
+        if (animateLaunch) WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
-        setContent {
+        splashScreen.setOnExitAnimationListener { it.remove() }
+        val appContent: @Composable () -> Unit = {
             val appearancePreferences = remember { AppearancePreferences(applicationContext) }
             var appearance by remember { mutableStateOf(appearancePreferences.load()) }
             LaunchedEffect(appearance.autoKnowledge, appearance.knowledgeHours) {
@@ -239,8 +231,7 @@ class MainActivity : ComponentActivity() {
                     return false
                 }
             }
-            WaferAITheme(appearance, animateLaunch = animateLaunch, launchReady = launchReady,
-                onLaunchFinished = { launchVisible = false }) {
+            WaferAITheme(appearance) {
                 val lightBars = !launchVisible && MaterialTheme.colorScheme.background.luminance() > 0.5f
                 SideEffect {
                     WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -267,14 +258,18 @@ class MainActivity : ComponentActivity() {
                 val csvState by historyViewModel.csv.collectAsStateWithLifecycle()
                 val backup by backupViewModel.state.collectAsStateWithLifecycle()
                 val training by repository.trainingSummary.collectAsStateWithLifecycle()
+                val waferRevision by repository.store.waferRevision.collectAsStateWithLifecycle()
                 var appliedRestore by rememberSaveable { mutableIntStateOf(0) }
-                var page by rememberSaveable { mutableStateOf(appearance.startTab.page()) }
+                var waferScreenRevision by rememberSaveable { mutableIntStateOf(0) }
+                val pageState = rememberSaveable { mutableStateOf(appearance.startTab.page()) }
+                val navigationScope = rememberCoroutineScope()
+                val navigation = remember(pageState, navigationScope) {
+                    TabNavigation(pageState, primaryPages, navigationScope)
+                }
+                val page by navigation.page
                 var accountReturn by rememberSaveable { mutableStateOf(Page.PROFILE) }
                 var legalReturn by rememberSaveable { mutableStateOf(Page.ABOUT) }
                 var legalDocument by rememberSaveable { mutableStateOf("terms") }
-                LaunchedEffect(accountState.message, page) {
-                    if (page != Page.ACCOUNT && accountState.error) accountState.message?.let { settingsSnackbar.showSnackbar(it) }
-                }
                 var themeReturn by rememberSaveable { mutableStateOf(Page.PROFILE) }
                 var chatOrigin by rememberSaveable { mutableStateOf(Page.AI) }
                 var taskReturn by rememberSaveable { mutableStateOf(Page.AI) }
@@ -292,15 +287,24 @@ class MainActivity : ComponentActivity() {
                 var overview by remember { mutableStateOf<WaferOverview?>(null) }
                 var overviewError by remember { mutableStateOf<String?>(null) }
                 val scrollStates = rememberSaveableStateHolder()
-                val selectedTab = when (page) {
-                    Page.HISTORY, Page.LOTS, Page.COMPARE, Page.TREND -> Page.DATA
-                    Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT, Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
-                    Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
-                    Page.PLUGINS -> if (pluginReturn in setOf(Page.AI, Page.CHAT)) Page.AI else Page.TOOLS
-                    Page.TASKS -> Page.AI
-                    Page.OVERVIEW -> Page.WAFER
-                    Page.MODELS -> when (modelReturn) { Page.WAFER -> Page.WAFER; Page.PROFILE -> Page.PROFILE; else -> Page.AI }
-                    else -> page
+                val selectedTab = remember {
+                    derivedStateOf {
+                        when (val current = page) {
+                            Page.HISTORY, Page.LOTS, Page.COMPARE, Page.TREND -> Page.DATA
+                            Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT,
+                            Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
+                            Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
+                            Page.PLUGINS -> if (pluginReturn == Page.AI || pluginReturn == Page.CHAT) Page.AI else Page.TOOLS
+                            Page.TASKS -> Page.AI
+                            Page.OVERVIEW -> Page.WAFER
+                            Page.MODELS -> when (modelReturn) {
+                                Page.WAFER -> Page.WAFER
+                                Page.PROFILE -> Page.PROFILE
+                                else -> Page.AI
+                            }
+                            else -> current
+                        }
+                    }
                 }
                 val canRestoreBackup = !importState.loading && !importState.predicting &&
                     !importState.exporting && !importState.analyzing && !csvState.busy
@@ -309,23 +313,23 @@ class MainActivity : ComponentActivity() {
                         backup.busy -> Unit
                         aiState.draft != null -> aiViewModel.close()
                         page == Page.WAFER && waferReturn != null -> {
-                            page = waferReturn ?: Page.DATA
+                            navigation.navigate(waferReturn ?: Page.DATA)
                             waferReturn = null
                         }
-                        page == Page.HISTORY -> page = if (lotId == null) historyReturn else Page.LOTS
-                        page == Page.LOTS || page == Page.TREND -> page = Page.DATA
-                        page == Page.CHAT -> page = chatOrigin
-                        page == Page.TASKS -> page = taskReturn
-                        page == Page.PLUGINS -> page = pluginReturn
-                        page == Page.MODELS -> page = modelReturn
-                        page == Page.COMPARE -> page = Page.HISTORY
-                        page == Page.APPEARANCE -> page = themeReturn
-                        page == Page.LEGAL -> page = legalReturn
-                        page == Page.ACCOUNT -> page = accountReturn
-                        page == Page.ABOUT -> page = Page.PROFILE
-                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL, Page.PROFILE_EDIT) -> page = Page.PROFILE
-                        page in setOf(Page.LOGS, Page.KNOWLEDGE, Page.TRAINING) -> page = Page.TOOLS
-                        else -> page = appearance.startTab.page()
+                        page == Page.HISTORY -> navigation.navigate(if (lotId == null) historyReturn else Page.LOTS)
+                        page == Page.LOTS || page == Page.TREND -> navigation.navigate(Page.DATA)
+                        page == Page.CHAT -> navigation.navigate(chatOrigin)
+                        page == Page.TASKS -> navigation.navigate(taskReturn)
+                        page == Page.PLUGINS -> navigation.navigate(pluginReturn)
+                        page == Page.MODELS -> navigation.navigate(modelReturn)
+                        page == Page.COMPARE -> navigation.navigate(Page.HISTORY)
+                        page == Page.APPEARANCE -> navigation.navigate(themeReturn)
+                        page == Page.LEGAL -> navigation.navigate(legalReturn)
+                        page == Page.ACCOUNT -> navigation.navigate(accountReturn)
+                        page == Page.ABOUT -> navigation.navigate(Page.PROFILE)
+                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL, Page.PROFILE_EDIT) -> navigation.navigate(Page.PROFILE)
+                        page in setOf(Page.LOGS, Page.KNOWLEDGE, Page.TRAINING) -> navigation.navigate(Page.TOOLS)
+                        else -> navigation.navigate(appearance.startTab.page())
                     }
                 }
                 val openModels: (Boolean) -> Unit = { add ->
@@ -333,13 +337,16 @@ class MainActivity : ComponentActivity() {
                     directModelAdd = add
                     directEditorSeen = false
                     if (add) aiViewModel.open()
-                    page = Page.MODELS
+                    navigation.navigate(Page.MODELS)
                 }
                 val openWafer: (Int) -> Unit = { id ->
                     if (importViewModel.openWafer(id)) {
                         if (page != Page.WAFER) waferReturn = page
-                        if (page != Page.WAFER) scrollStates.removeState(Page.WAFER.name)
-                        page = Page.WAFER
+                        if (page != Page.WAFER) {
+                            scrollStates.removeState(Page.WAFER.name)
+                            waferScreenRevision++
+                        }
+                        navigation.navigate(Page.WAFER)
                     }
                 }
 
@@ -349,16 +356,30 @@ class MainActivity : ComponentActivity() {
                     lotCode = null
                     reviewingYield = false
                     yieldBand = null
-                    page = Page.HISTORY
+                    navigation.navigate(Page.HISTORY)
                 }
-                BackHandler(enabled = backup.busy || aiState.draft != null || page != appearance.startTab.page() ||
-                    (page == Page.WAFER && waferReturn != null), onBack = goBack)
-                LaunchedEffect(page, aiState.draft, aiState.saving, directModelAdd) {
-                    if (page == Page.MODELS && directModelAdd) {
-                        if (aiState.draft != null) directEditorSeen = true
-                        else if (directEditorSeen && !aiState.saving) {
-                            directModelAdd = false
-                            page = modelReturn
+                PageEffects(pageState) { current ->
+                    BackHandler(enabled = backup.busy || aiState.draft != null || current != appearance.startTab.page() ||
+                        (current == Page.WAFER && waferReturn != null), onBack = goBack)
+                    LaunchedEffect(accountState.message, current) {
+                        if (current != Page.ACCOUNT && accountState.error) {
+                            accountState.message?.let { settingsSnackbar.showSnackbar(it) }
+                        }
+                    }
+                    LaunchedEffect(current, aiState.draft, aiState.saving, directModelAdd) {
+                        if (current == Page.MODELS && directModelAdd) {
+                            if (aiState.draft != null) directEditorSeen = true
+                            else if (directEditorSeen && !aiState.saving) {
+                                directModelAdd = false
+                                navigation.navigate(modelReturn)
+                            }
+                        }
+                    }
+                    LaunchedEffect(current, lotId, reviewingYield, yieldBand, appearance.yieldThreshold) {
+                        when (current) {
+                            Page.HISTORY -> historyViewModel.show(lotId, reviewingYield, appearance.yieldThreshold, yieldBand)
+                            Page.LOTS -> lotViewModel.refresh()
+                            else -> Unit
                         }
                     }
                 }
@@ -373,26 +394,19 @@ class MainActivity : ComponentActivity() {
                         yieldBand = null
                         waferReturn = null
                         comparison = intArrayOf()
-                        overview = null
+                        waferScreenRevision++
                         listOf(Page.WAFER, Page.DATA, Page.HISTORY, Page.LOTS, Page.COMPARE)
                             .forEach { scrollStates.removeState(it.name) }
                     }
                 }
-                LaunchedEffect(page, lotId, importState.wafer?.id, reviewingYield, yieldBand, appearance.yieldThreshold) {
-                    when (page) {
-                        Page.HISTORY -> historyViewModel.show(lotId, reviewingYield, appearance.yieldThreshold, yieldBand)
-                        Page.LOTS -> lotViewModel.refresh()
-                        Page.DATA, Page.WAFER, Page.OVERVIEW, Page.PROFILE -> {
-                            overviewError = null
-                            try {
-                                overview = repository.overview()
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                overviewError = "无法读取本机统计。"
-                            }
-                        }
-                        else -> Unit
+                LaunchedEffect(waferRevision) {
+                    try {
+                        overview = repository.overview()
+                        overviewError = null
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        overviewError = "无法读取本机统计。"
                     }
                 }
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -437,50 +451,47 @@ class MainActivity : ComponentActivity() {
                     if (uri == null) backupViewModel.cancel() else backupViewModel.run(uri, restore = true)
                 }
 
-                val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                val showBottomBar = page != Page.APPEARANCE && page != Page.CHAT &&
-                    aiState.draft == null && !backup.busy && !(page == Page.AI && keyboardVisible)
-                val overlayBottomBar = showBottomBar && appearance.bottomBar == BottomBarStyle.FLOATING &&
+                val ime = WindowInsets.ime
+                val density = LocalDensity.current
+                val showBottomBar = remember(ime, density) {
+                    derivedStateOf {
+                        val current = page
+                        current != Page.APPEARANCE && current != Page.CHAT && aiState.draft == null &&
+                            !backup.busy && !(current == Page.AI && ime.getBottom(density) > 0)
+                    }
+                }
+                val floatingGlass = appearance.bottomBar == BottomBarStyle.FLOATING &&
                     appearance.glass != GlassLevel.NONE
+                val backdrop = rememberDockBackdrop(floatingGlass && !launchVisible, navigation.moving)
+                val pageBackground = MaterialTheme.colorScheme.background
+                val focus = LocalFocusManager.current
+                WaferConversionDialog(importViewModel)
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     snackbarHost = { SnackbarHost(settingsSnackbar) },
                     bottomBar = {
-                        if (showBottomBar) {
-                            WaferBottomBar(appearance, selectedTab) {
+                        if (showBottomBar.value) {
+                            WaferBottomBar(appearance, selectedTab.value, backdrop) {
+                                if (page == Page.AI && it != Page.AI) focus.clearFocus()
                                 waferReturn = null
-                                page = it
+                                navigation.navigate(it)
                             }
                         }
                     }
                 ) { insets ->
                     val direction = LocalLayoutDirection.current
                     val barClearance = insets.calculateBottomPadding()
-                    AnimatedContent(
-                        targetState = page,
+                    val overlayBottomBar = showBottomBar.value && floatingGlass
+                    PrimaryTabHost(
+                        navigation = navigation,
+                        motion = appearance.tabMotion,
+                        prepareTabs = !launchVisible,
                         modifier = Modifier.fillMaxSize().padding(
                             start = insets.calculateStartPadding(direction),
                             top = insets.calculateTopPadding(),
                             end = insets.calculateEndPadding(direction),
                             bottom = if (overlayBottomBar) 0.dp else barClearance
-                        ).clipToBounds(),
-                        transitionSpec = {
-                            val from = tabs.indexOfFirst { it.first == initialState }
-                            val to = tabs.indexOfFirst { it.first == targetState }
-                            when {
-                                from < 0 || to < 0 -> EnterTransition.None togetherWith ExitTransition.None
-                                appearance.tabMotion == TabMotion.FADE ->
-                                    fadeIn(tween(160, easing = tabEasing)) togetherWith fadeOut(tween(100))
-                                else -> {
-                                    val direction = if (to > from) 1 else -1
-                                    (slideInHorizontally(tween(190, easing = tabEasing)) { direction * it / 6 } +
-                                        fadeIn(tween(160, easing = tabEasing))) togetherWith
-                                        (slideOutHorizontally(tween(160, easing = tabEasing)) { -direction * it / 8 } +
-                                            fadeOut(tween(120)))
-                                }
-                            }
-                        },
-                        label = "wafer tabs"
+                        ).clipToBounds().recordDockBackdrop(backdrop.takeIf { overlayBottomBar }, pageBackground)
                     ) { destination ->
                         // Scrolling pages extend under the glass. The chat composer needs its own safe area.
                         val drawBehindBar = overlayBottomBar && destination !in setOf(Page.AI, Page.CHAT, Page.APPEARANCE)
@@ -488,7 +499,12 @@ class MainActivity : ComponentActivity() {
                             .padding(bottom = if (overlayBottomBar && !drawBehindBar) barClearance else 0.dp)
                         CompositionLocalProvider(LocalFloatingNavigationPadding provides
                             if (drawBehindBar) barClearance else 0.dp) {
-                            scrollStates.SaveableStateProvider(destination.name) {
+                            val revision = when (destination) {
+                                Page.WAFER -> waferScreenRevision
+                                Page.DATA -> appliedRestore
+                                else -> 0
+                            }
+                            key(revision) { scrollStates.SaveableStateProvider(destination.name) {
                                 when (destination) {
                                     Page.DATA -> StatisticsScreen(
                                         overview, overviewError,
@@ -501,7 +517,7 @@ class MainActivity : ComponentActivity() {
                                             lotCode = null
                                             reviewingYield = true
                                             yieldBand = null
-                                            page = Page.HISTORY
+                                            navigation.navigate(Page.HISTORY)
                                         },
                                         onYieldBand = { band ->
                                             historyReturn = Page.DATA
@@ -509,10 +525,10 @@ class MainActivity : ComponentActivity() {
                                             lotCode = null
                                             reviewingYield = false
                                             yieldBand = band
-                                            page = Page.HISTORY
+                                            navigation.navigate(Page.HISTORY)
                                         },
-                                        onLots = { page = Page.LOTS },
-                                        onTrend = { page = Page.TREND },
+                                        onLots = { navigation.navigate(Page.LOTS) },
+                                        onTrend = { navigation.navigate(Page.TREND) },
                                         modifier = modifier
                                     )
                                     Page.TREND -> InspectionTrendScreen(repository, goBack, openWafer, modifier)
@@ -534,7 +550,7 @@ class MainActivity : ComponentActivity() {
                                         onCompare = { first, second ->
                                             comparison = intArrayOf(first, second)
                                             scrollStates.removeState(Page.COMPARE.name)
-                                            page = Page.COMPARE
+                                            navigation.navigate(Page.COMPARE)
                                         },
                                         reviewingYield = reviewingYield, lotCode = lotCode, modifier = modifier
                                     )
@@ -546,7 +562,7 @@ class MainActivity : ComponentActivity() {
                                             lotCode = code
                                             reviewingYield = false
                                             yieldBand = null
-                                            page = Page.HISTORY
+                                            navigation.navigate(Page.HISTORY)
                                         },
                                         modifier = modifier
                                     )
@@ -566,8 +582,8 @@ class MainActivity : ComponentActivity() {
                                                 aiViewModel.open(it)
                                             }
                                         },
-                                        onOpenTasks = { taskReturn = destination; page = Page.TASKS },
-                                        onOpenPlugins = { pluginReturn = destination; page = Page.PLUGINS },
+                                        onOpenTasks = { taskReturn = destination; navigation.navigate(Page.TASKS) },
+                                        onOpenPlugins = { pluginReturn = destination; navigation.navigate(Page.PLUGINS) },
                                         thinking = appearance.chatProfileId?.let(appearance.chatThinking::get) ?: ChatThinking.DEFAULT,
                                         onThinking = { effort ->
                                             appearance.chatProfileId?.let { id ->
@@ -578,36 +594,37 @@ class MainActivity : ComponentActivity() {
                                         },
                                         memoryEnabled = appearance.chatMemory, onMemoryEnabled = { saveAppearance(appearance.copy(chatMemory = it)) },
                                         onBack = goBack.takeIf { destination == Page.CHAT },
+                                        active = pageState.value == destination,
                                         modifier = modifier.consumeWindowInsets(insets)
                                     )
                                     Page.TOOLS -> ToolsScreen(
-                                        onLogs = { page = Page.LOGS },
-                                        onKnowledge = { page = Page.KNOWLEDGE }, onTrain = { page = Page.TRAINING },
-                                        onPlugins = { pluginReturn = Page.TOOLS; page = Page.PLUGINS }, modifier = modifier
+                                        onLogs = { navigation.navigate(Page.LOGS) },
+                                        onKnowledge = { navigation.navigate(Page.KNOWLEDGE) }, onTrain = { navigation.navigate(Page.TRAINING) },
+                                        onPlugins = { pluginReturn = Page.TOOLS; navigation.navigate(Page.PLUGINS) }, modifier = modifier
                                     )
                                     Page.TRAINING -> TrainingScreen(repository, goBack, modifier)
                                     Page.PROFILE -> ProfileScreen(
                                         overview, aiState.library.profiles.size,
-                                        onTheme = { themeReturn = Page.PROFILE; page = Page.APPEARANCE },
-                                        onLanguage = { page = Page.LANGUAGE }, onGeneral = { page = Page.GENERAL },
-                                        onBackup = { page = Page.BACKUP }, onModels = { openModels(false) },
+                                        onTheme = { themeReturn = Page.PROFILE; navigation.navigate(Page.APPEARANCE) },
+                                        onLanguage = { navigation.navigate(Page.LANGUAGE) }, onGeneral = { navigation.navigate(Page.GENERAL) },
+                                        onBackup = { navigation.navigate(Page.BACKUP) }, onModels = { openModels(false) },
                                         onHistory = openHistory, account = accountState.user,
-                                        onAccount = { accountReturn = Page.PROFILE; page = Page.ACCOUNT },
-                                        profile = userProfileState.profile, onEditProfile = { page = Page.PROFILE_EDIT },
-                                        onAbout = { page = Page.ABOUT }, modifier = modifier
+                                        onAccount = { accountReturn = Page.PROFILE; navigation.navigate(Page.ACCOUNT) },
+                                        profile = userProfileState.profile, onEditProfile = { navigation.navigate(Page.PROFILE_EDIT) },
+                                        onAbout = { navigation.navigate(Page.ABOUT) }, modifier = modifier
                                     )
                                     Page.PROFILE_EDIT -> com.example.waferai.ui.settings.UserProfileScreen(userProfileState, userProfileViewModel,
                                         accountState.user?.name ?: "访客", goBack, modifier)
                                     Page.ACCOUNT -> AccountScreen(accountState, accountViewModel, goBack,
-                                        onLegal = { legalReturn = Page.ACCOUNT; legalDocument = it; page = Page.LEGAL },
+                                        onLegal = { legalReturn = Page.ACCOUNT; legalDocument = it; navigation.navigate(Page.LEGAL) },
                                         modifier = modifier.consumeWindowInsets(insets))
                                     Page.ABOUT -> AboutScreen(goBack, onHelp = {
                                         if (accountState.user == null) {
                                             accountReturn = Page.ABOUT
-                                            page = Page.ACCOUNT
+                                            navigation.navigate(Page.ACCOUNT)
                                             accountViewModel.hint("请先登录，再打开帮助中心。")
                                         } else accountViewModel.help()
-                                    }, onLegal = { legalReturn = Page.ABOUT; legalDocument = it; page = Page.LEGAL }, updates = updateViewModel, modifier = modifier)
+                                    }, onLegal = { legalReturn = Page.ABOUT; legalDocument = it; navigation.navigate(Page.LEGAL) }, updates = updateViewModel, modifier = modifier)
                                     Page.LEGAL -> LegalScreen(legalDocument, goBack, modifier)
                                     Page.LOGS -> OperationLogScreen(repository.operationLog, goBack, modifier)
                                     Page.PLUGINS -> SearchPluginsScreen(container.knowledge, goBack, modifier)
@@ -616,10 +633,10 @@ class MainActivity : ComponentActivity() {
                                     Page.KNOWLEDGE -> KnowledgeScreen(container.knowledge, appearance.autoKnowledge,
                                         { saveAppearance(appearance.copy(autoKnowledge = it)) }, appearance.knowledgeHours,
                                         { saveAppearance(appearance.copy(knowledgeHours = it)) },
-                                        { pluginReturn = Page.TOOLS; page = Page.PLUGINS }, goBack, modifier)
+                                        { pluginReturn = Page.TOOLS; navigation.navigate(Page.PLUGINS) }, goBack, modifier)
                                     Page.LANGUAGE -> LanguageScreen(appearance, { saveAppearance(appearance.copy(language = it)) }, goBack, modifier)
                                     Page.GENERAL -> GeneralScreen(appearance, { saveAppearance(it) }, goBack,
-                                        { themeReturn = Page.GENERAL; page = Page.APPEARANCE }, modifier)
+                                        { themeReturn = Page.GENERAL; navigation.navigate(Page.APPEARANCE) }, modifier)
                                     Page.BACKUP -> BackupScreen(
                                         backup.busy, canRestoreBackup, backup.message, backup.error,
                                         onExport = {
@@ -645,6 +662,8 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Page.OVERVIEW, Page.WAFER -> WaferHomeScreen(
                                         importState = importState,
+                                        onOpenConverter = importViewModel::openConversion,
+                                        tabMotion = appearance.tabMotion,
                                         guideState = guideState, onSaveGuideFile = saveGuideFile,
                                         overview = overview, onHistory = openHistory, onOpenWafer = openWafer,
                                         onBack = goBack.takeIf { waferReturn != null },
@@ -671,7 +690,7 @@ class MainActivity : ComponentActivity() {
                                         aiSaving = aiState.saving || chatBusy,
                                         aiError = aiState.error,
                                         onSelectAiProfile = aiViewModel::select,
-                                        onChat = { chatOrigin = Page.WAFER; page = Page.CHAT },
+                                        onChat = { chatOrigin = Page.WAFER; navigation.navigate(Page.CHAT) },
                                         onExportReport = {
                                             importViewModel.prepareReportExport()?.let { filename ->
                                                 runCatching { reportPicker.launch(filename) }.onFailure {
@@ -682,11 +701,14 @@ class MainActivity : ComponentActivity() {
                                         modifier = modifier
                                     )
                                 }
-                            }
+                            } }
                         }
                     }
                 }
             }
+        }
+        setContent {
+            StartupTransition(animateLaunch, onFinished = { launchVisible = false }, content = appContent)
         }
     }
 }

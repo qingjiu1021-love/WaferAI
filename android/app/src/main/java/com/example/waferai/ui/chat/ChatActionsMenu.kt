@@ -1,5 +1,7 @@
 package com.example.waferai.ui.chat
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
+import com.example.waferai.ui.theme.GlassDropdownMenu as DropdownMenu
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape

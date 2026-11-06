@@ -1,5 +1,6 @@
 package com.example.waferai.ui.history
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,7 +17,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import com.example.waferai.ui.theme.BackButton
 import com.example.waferai.ui.theme.UiText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState

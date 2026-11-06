@@ -1,5 +1,11 @@
 package com.example.waferai.ui.importdata
 
+import com.example.waferai.ui.theme.GlassSegmentedTabs
+import com.example.waferai.ui.theme.GlassFilterChip as FilterChip
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
+import com.example.waferai.ui.theme.GlassIconButton as IconButton
+import android.animation.ValueAnimator
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,10 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import com.example.waferai.ui.theme.UiText as Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,8 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
@@ -52,6 +61,10 @@ import androidx.compose.runtime.key
 import com.example.waferai.ui.theme.GlassButton
 import com.example.waferai.ui.theme.BackButton
 import com.example.waferai.ui.theme.StudioHeader
+import com.example.waferai.ui.theme.StudioGlyph
+import com.example.waferai.ui.theme.TabMotion
+import com.example.waferai.ui.theme.tabTransition
+import com.example.waferai.ui.theme.LocalEnglish
 import com.example.waferai.ui.theme.StudioIcon
 import com.example.waferai.ui.theme.StudioPanel
 import com.example.waferai.ui.theme.WaferArtwork
@@ -59,9 +72,13 @@ import java.util.Locale
 
 private enum class WaferPanel(val label: String) { MAP("晶圆图"), DETECT("AI 检测"), REPORT("分析报告") }
 
+private val waferPanelLabels = WaferPanel.entries.map { it.label }
+
 @Composable
 fun WaferHomeScreen(
     importState: ImportUiState,
+    onOpenConverter: () -> Unit,
+    tabMotion: TabMotion,
     guideState: GuideUiState,
     onSaveGuideFile: (com.example.waferai.data.local.GuideFile) -> Unit,
     onSelectFile: () -> Unit,
@@ -122,7 +139,12 @@ fun WaferHomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         onBack?.let { BackButton(it) }
-        StudioHeader("晶圆工作台", "WAFERAI / WORKSPACE", StudioIcon.WAFER)
+        StudioHeader("晶圆工作台", "WAFERAI / WORKSPACE", StudioIcon.WAFER, compact = true, action = {
+            val label = if (LocalEnglish.current) "Convert wafer file" else "晶圆文件转换"
+            IconButton(onOpenConverter, modifier = Modifier.semantics { contentDescription = label }) {
+                StudioGlyph(StudioIcon.CONVERT, Modifier.size(19.dp), Color(0xFFDB9754))
+            }
+        })
         if (wafer == null) {
             WorkspaceIntro(onSelectFile, onSelectImage, { showDemoPicker = true }, { showGuide = true }, enabled = !busy)
             StudioPanel(Modifier.fillMaxWidth()) {
@@ -157,153 +179,165 @@ fun WaferHomeScreen(
                     }
                 }
             }
-            TabRow(panel.ordinal, containerColor = MaterialTheme.colorScheme.surface) {
-                WaferPanel.entries.forEach { option -> Tab(panel == option, { panel = option }, text = { Text(option.label) }) }
-            }
-            if (panel == WaferPanel.MAP) {
-                WaferExplorer(wafer, if (focus != null) WaferMapFilter.ALL else mapFilter, showRegionGuides, onToggleRegionGuides,
-                    onFilterChange = { focusId = null; onMapFilterChange(it) }, focus = focus, focusRevision = focusRevision,
-                    onClearFocus = { focusId = null }, preparedFailures = summary?.findings?.firstOrNull()?.indices)
-                summary?.let { current ->
-                    key(wafer.id) {
-                        WaferSummaryCard(current, importState.prediction) { finding ->
-                            focusId = finding.id
-                            focusRevision++
-                        }
-                    }
-                }
-                GlassButton({ panel = WaferPanel.DETECT }, Modifier.fillMaxWidth(), prominent = true) { Text("进入 AI 检测") }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onSelectFile, enabled = !busy) { Text("更换数据") }
-                    TextButton(onSelectImage, enabled = !busy) { Text("导入图片") }
-                    TextButton({ showDemoPicker = true }, enabled = !busy) { Text("演示样本") }
-                }
-                TextButton({ showGuide = true }, enabled = !busy) { Text("一键导入晶圆指引") }
-                if (wafer.lotCode == "IMAGE") Text("良率由图片网格推算，请对照原图核对行列和颜色。", style = MaterialTheme.typography.bodySmall)
-            }
-            if (panel == WaferPanel.DETECT) {
-                StatusPill(if (importState.prediction == null) "等待检测" else "检测结果已保存")
-                Text(importState.prediction?.labelZh ?: "AI 缺陷检测", style = MaterialTheme.typography.headlineSmall)
-                importState.prediction?.let { prediction ->
-                    Text(prediction.label + " · 模型得分 " + scorePercent(prediction.score),
-                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
-                }
-                Text("使用手机本地模型识别晶圆缺陷模式。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassButton(onPredict, enabled = !busy, prominent = true, modifier = Modifier.weight(1f)) {
-                        Text(if (importState.predicting) "正在检测…" else "开始晶圆检测")
-                    }
-                    GlassButton({ panel = WaferPanel.REPORT }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                        Text("查看分析报告")
-                    }
-                }
-                onPredictTrained?.let { predict ->
-                    GlassButton(predict, Modifier.fillMaxWidth(), enabled = !busy) { Text("用训练模型检测") }
-                }
-                importState.inspection?.let { inspection ->
-                    StudioPanel(Modifier.fillMaxWidth()) {
-                        Text("检测结论", style = MaterialTheme.typography.titleMedium)
-                        val needsReview = 100L * wafer.goodCount < inspection.threshold.toLong() * wafer.totalCount
-                        Text(if (needsReview) "低于检测阈值 · 待排查" else "达到检测阈值",
-                            color = if (needsReview) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                        Text("检测时良率阈值 ${inspection.threshold}%", style = MaterialTheme.typography.bodySmall)
-                        Text("检测结果已纳入历史趋势。", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                if (importState.predicting || importState.exporting) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                }
-                importState.exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-                importState.exportError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                importState.predictionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                importState.prediction?.let { prediction ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("缺陷模式识别", style = MaterialTheme.typography.titleMedium)
-                            Text("得分表示模型对当前分类的倾向。", style = MaterialTheme.typography.bodySmall)
-                            if (prediction.label == "none") {
-                                Text("该类别表示未识别到特定缺陷模式，芯片良率见本片统计。")
+            GlassSegmentedTabs(waferPanelLabels, panel.ordinal, { panel = WaferPanel.entries[it] })
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            AnimatedContent(
+                targetState = panel,
+                modifier = Modifier.fillMaxWidth().clipToBounds(),
+                transitionSpec = {
+                    val direction = targetState.ordinal.compareTo(initialState.ordinal)
+                    tabTransition(if (rtl) -direction else direction, tabMotion,
+                        ValueAnimator.areAnimatorsEnabled()).using(null)
+                },
+                label = "inspection panels"
+            ) { displayedPanel ->
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (displayedPanel == WaferPanel.MAP) {
+                        WaferExplorer(wafer, if (focus != null) WaferMapFilter.ALL else mapFilter, showRegionGuides, onToggleRegionGuides,
+                            onFilterChange = { focusId = null; onMapFilterChange(it) }, focus = focus, focusRevision = focusRevision,
+                            onClearFocus = { focusId = null }, preparedFailures = summary?.findings?.firstOrNull()?.indices)
+                        summary?.let { current ->
+                            key(wafer.id) {
+                                WaferSummaryCard(current, importState.prediction) { finding ->
+                                    focusId = finding.id
+                                    focusRevision++
+                                }
                             }
-                            Text("模型 ${prediction.modelVersion}", style = MaterialTheme.typography.bodySmall)
-                            importState.predictionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                            Text("推理位置：手机本地",style=MaterialTheme.typography.bodySmall)
-                            val topScores = prediction.scores.sortedByDescending { it.score }.take(3)
-                            if (topScores.isNotEmpty()) {
-                                HorizontalDivider()
-                                Text("模型得分前 3 项", style = MaterialTheme.typography.titleSmall)
-                                topScores.forEach { candidate ->
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("${candidate.labelZh}（${candidate.label}）", modifier = Modifier.weight(1f),
-                                            style = MaterialTheme.typography.bodyMedium)
-                                        Text(scorePercent(candidate.score), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        GlassButton({ panel = WaferPanel.DETECT }, Modifier.fillMaxWidth(), prominent = true) { Text("进入 AI 检测") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onSelectFile, enabled = !busy) { Text("更换数据") }
+                            TextButton(onSelectImage, enabled = !busy) { Text("导入图片") }
+                            TextButton({ showDemoPicker = true }, enabled = !busy) { Text("演示样本") }
+                        }
+                        TextButton({ showGuide = true }, enabled = !busy) { Text("一键导入晶圆指引") }
+                        if (wafer.lotCode == "IMAGE") Text("良率由图片网格推算，请对照原图核对行列和颜色。", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (displayedPanel == WaferPanel.DETECT) {
+                        StatusPill(if (importState.prediction == null) "等待检测" else "检测结果已保存")
+                        Text(importState.prediction?.labelZh ?: "AI 缺陷检测", style = MaterialTheme.typography.headlineSmall)
+                        importState.prediction?.let { prediction ->
+                            Text(prediction.label + " · 模型得分 " + scorePercent(prediction.score),
+                                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                        }
+                        Text("使用手机本地模型识别晶圆缺陷模式。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            GlassButton(onPredict, enabled = !busy, prominent = true, modifier = Modifier.weight(1f)) {
+                                Text(if (importState.predicting) "正在检测…" else "开始晶圆检测")
+                            }
+                            GlassButton({ panel = WaferPanel.REPORT }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                                Text("查看分析报告")
+                            }
+                        }
+                        onPredictTrained?.let { predict ->
+                            GlassButton(predict, Modifier.fillMaxWidth(), enabled = !busy) { Text("用训练模型检测") }
+                        }
+                        importState.inspection?.let { inspection ->
+                            StudioPanel(Modifier.fillMaxWidth()) {
+                                Text("检测结论", style = MaterialTheme.typography.titleMedium)
+                                val needsReview = 100L * wafer.goodCount < inspection.threshold.toLong() * wafer.totalCount
+                                Text(if (needsReview) "低于检测阈值 · 待排查" else "达到检测阈值",
+                                    color = if (needsReview) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                                Text("检测时良率阈值 ${inspection.threshold}%", style = MaterialTheme.typography.bodySmall)
+                                Text("检测结果已纳入历史趋势。", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (importState.predicting || importState.exporting) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                        }
+                        importState.exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                        importState.exportError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        importState.predictionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        importState.prediction?.let { prediction ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("缺陷模式识别", style = MaterialTheme.typography.titleMedium)
+                                    Text("得分表示模型对当前分类的倾向。", style = MaterialTheme.typography.bodySmall)
+                                    if (prediction.label == "none") {
+                                        Text("该类别表示未识别到特定缺陷模式，芯片良率见本片统计。")
                                     }
-                                    LinearProgressIndicator(
-                                        progress = { candidate.score.toFloat().coerceIn(0f, 1f) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    Text("模型 ${prediction.modelVersion}", style = MaterialTheme.typography.bodySmall)
+                                    importState.predictionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                    Text("推理位置：手机本地",style=MaterialTheme.typography.bodySmall)
+                                    val topScores = prediction.scores.sortedByDescending { it.score }.take(3)
+                                    if (topScores.isNotEmpty()) {
+                                        HorizontalDivider()
+                                        Text("模型得分前 3 项", style = MaterialTheme.typography.titleSmall)
+                                        topScores.forEach { candidate ->
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("${candidate.labelZh}（${candidate.label}）", modifier = Modifier.weight(1f),
+                                                    style = MaterialTheme.typography.bodyMedium)
+                                                Text(scorePercent(candidate.score), style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                            LinearProgressIndicator(
+                                                progress = { candidate.score.toFloat().coerceIn(0f, 1f) },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
+                        TextButton(onChat) { Text("在 AI 对话中追问") }
                     }
-                }
-                TextButton(onChat) { Text("在 AI 对话中追问") }
-            }
-            if (panel == WaferPanel.REPORT) {
-                if (summary == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-                else key(wafer.id) {
-                    ReportCharts(wafer, prepared = summary.report)
-                    SpatialStatsCard(wafer, showRings = false, prepared = summary)
-                }
-                StudioPanel(Modifier.fillMaxWidth()) {
-                    Text("检测报告", style = MaterialTheme.typography.titleLarge)
-                    Text("晶圆图、良率统计与已保存的识别结果。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    GlassButton(onExportReport, Modifier.fillMaxWidth(), enabled = !busy, prominent = true) { Text(if (importState.exporting) "正在导出…" else "导出 PDF 报告") }
-                    importState.exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-                    importState.exportError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-                if (importState.prediction != null) {
-                    AiProfilePicker(aiProfiles, onSelectAiProfile, onOpenSettings, enabled = !busy && !aiSaving)
-                    aiError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    Text("AI 解析模板", style = MaterialTheme.typography.titleMedium)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        com.example.waferai.data.ai.AnalysisPreset.entries.forEach { preset ->
-                            androidx.compose.material3.FilterChip(analysisPreset == preset,
-                                { onAnalysisPreset(preset) }, enabled = !busy,
-                                label = { Text(preset.title) })
+                    if (displayedPanel == WaferPanel.REPORT) {
+                        if (summary == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        else key(wafer.id) {
+                            ReportCharts(wafer, prepared = summary.report)
+                            SpatialStatsCard(wafer, showRings = false, prepared = summary)
                         }
-                    }
-                    Text("数字由本机事实填入；模型解释与假设仍需复核。切换模板后点击生成，已有解析保留。", style = MaterialTheme.typography.bodySmall)
-                    GlassButton(
-                        onAnalyze, enabled = !busy && !aiSaving && aiProfiles.active != null,
-                        prominent = true, modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (importState.analysis == null) "AI 解析（联网）" else "重新解析（联网）")
-                    }
-                    aiProfiles.active?.let { profile ->
-                        Text("解析会向 ${profile.provider.title} 发送统计、识别摘要及匹配的知识条目，可能产生 API 费用。",
-                            style = MaterialTheme.typography.bodySmall)
-                    }
-                    if(importState.analyzing) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text("正在生成解析…")
-                        TextButton(onCancelAnalysis) { Text("取消解析") }
-                    }
-                    importState.analysisError?.let {
-                        Text(it,color=MaterialTheme.colorScheme.error)
-                        TextButton(onOpenSettings,enabled=!busy) { Text("管理模型") }
-                    }
-                    importState.analysis?.let { analysis ->
-                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Text("AI 解析",style=MaterialTheme.typography.titleLarge)
-                            SelectionContainer { androidx.compose.material3.Text(analysis.content) }
-                            summary?.findings?.filter { it.indices.isNotEmpty() && analysis.content.contains(it.detail) }?.forEach { finding ->
-                                TextButton({ focusId = finding.id; focusRevision++; panel = WaferPanel.MAP }) {
-                                    Text("定位证据：${finding.title}")
+                        StudioPanel(Modifier.fillMaxWidth()) {
+                            Text("检测报告", style = MaterialTheme.typography.titleLarge)
+                            Text("晶圆图、良率统计与已保存的识别结果。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            GlassButton(onExportReport, Modifier.fillMaxWidth(), enabled = !busy, prominent = true) { Text(if (importState.exporting) "正在导出…" else "导出 PDF 报告") }
+                            importState.exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                            importState.exportError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        }
+                        if (importState.prediction != null) {
+                            AiProfilePicker(aiProfiles, onSelectAiProfile, onOpenSettings, enabled = !busy && !aiSaving)
+                            aiError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            Text("AI 解析模板", style = MaterialTheme.typography.titleMedium)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                com.example.waferai.data.ai.AnalysisPreset.entries.forEach { preset ->
+                                    FilterChip(analysisPreset == preset,
+                                        { onAnalysisPreset(preset) }, enabled = !busy,
+                                        label = { Text(preset.title) })
                                 }
                             }
-                            Text("${analysis.model}\n${analysis.createdAt}",style=MaterialTheme.typography.bodySmall)
-                            Text("已保存在本机。可能原因属于待验证假设，应结合电测和实际工艺记录复核。",style=MaterialTheme.typography.bodySmall)
-                        } }
+                            Text("数字由本机事实填入；模型解释与假设仍需复核。切换模板后点击生成，已有解析保留。", style = MaterialTheme.typography.bodySmall)
+                            GlassButton(
+                                onAnalyze, enabled = !busy && !aiSaving && aiProfiles.active != null,
+                                prominent = true, modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (importState.analysis == null) "AI 解析（联网）" else "重新解析（联网）")
+                            }
+                            aiProfiles.active?.let { profile ->
+                                Text("解析会向 ${profile.provider.title} 发送统计、识别摘要及匹配的知识条目，可能产生 API 费用。",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                            if(importState.analyzing) {
+                                LinearProgressIndicator(Modifier.fillMaxWidth())
+                                Text("正在生成解析…")
+                                TextButton(onCancelAnalysis) { Text("取消解析") }
+                            }
+                            importState.analysisError?.let {
+                                Text(it,color=MaterialTheme.colorScheme.error)
+                                TextButton(onOpenSettings,enabled=!busy) { Text("管理模型") }
+                            }
+                            importState.analysis?.let { analysis ->
+                                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Text("AI 解析",style=MaterialTheme.typography.titleLarge)
+                                    SelectionContainer { androidx.compose.material3.Text(analysis.content) }
+                                    summary?.findings?.filter { it.indices.isNotEmpty() && analysis.content.contains(it.detail) }?.forEach { finding ->
+                                        TextButton({ focusId = finding.id; focusRevision++; panel = WaferPanel.MAP }) {
+                                            Text("定位证据：${finding.title}")
+                                        }
+                                    }
+                                    Text("${analysis.model}\n${analysis.createdAt}",style=MaterialTheme.typography.bodySmall)
+                                    Text("已保存在本机。可能原因属于待验证假设，应结合电测和实际工艺记录复核。",style=MaterialTheme.typography.bodySmall)
+                                } }
+                            }
+                        }
                     }
                 }
             }

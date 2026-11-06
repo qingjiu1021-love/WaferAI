@@ -7,6 +7,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.example.waferai.data.remote.*
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.Writer
 import java.io.Reader
 import java.time.Instant
@@ -43,8 +45,11 @@ data class WaferOverview(
 
 class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQLiteOpenHelper(context, name, null, 2) {
     private val gson = Gson()
+    private val revision = MutableStateFlow(0L)
+    internal val waferRevision = revision.asStateFlow()
     @Synchronized fun backup(writer: Writer, checkActive: () -> Unit) = WaferBackup.write(writableDatabase, writer, checkActive)
-    @Synchronized fun restoreBackup(reader: Reader, checkActive: () -> Unit) = WaferBackup.restore(writableDatabase, reader, checkActive)
+    @Synchronized fun restoreBackup(reader: Reader, checkActive: () -> Unit) =
+        WaferBackup.restore(writableDatabase, reader, checkActive).also { revision.value++ }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE lots(id INTEGER PRIMARY KEY, lot_code TEXT NOT NULL UNIQUE)")
@@ -75,6 +80,7 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
     @Synchronized internal fun saveParsed(parsed: ParsedWafer): ImportResponse {
         val wafer = parsed.detail
         val db = writableDatabase
+        var inserted = false
         db.beginTransaction()
         try {
             db.execSQL("INSERT OR IGNORE INTO lots(lot_code) VALUES(?)", arrayOf(wafer.lotCode))
@@ -92,8 +98,13 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
                 put("map_json", gson.toJson(wafer.map)); put("input_hash", parsed.inputHash); put("created_at", Instant.now().toString())
             }
             val id = db.insertOrThrow("wafers", null, values).toInt()
-            db.setTransactionSuccessful(); return ImportResponse(false, wafer.copy(id=id))
-        } finally { db.endTransaction() }
+            db.setTransactionSuccessful()
+            inserted = true
+            return ImportResponse(false, wafer.copy(id = id))
+        } finally {
+            db.endTransaction()
+            if (inserted) revision.value++
+        }
     }
     @Synchronized fun detail(id: Int): WaferDetail = readableDatabase.rawQuery(
         "SELECT w.*,l.lot_code FROM wafers w JOIN lots l ON l.id=w.lot_id WHERE w.id=?", arrayOf(id.toString())

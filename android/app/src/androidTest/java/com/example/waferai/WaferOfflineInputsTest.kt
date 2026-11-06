@@ -12,6 +12,7 @@ import com.example.waferai.data.local.WaferImage
 import com.example.waferai.data.local.WaferImageOptions
 import com.example.waferai.data.local.WaferPalette
 import com.example.waferai.data.local.WaferParquet
+import com.example.waferai.data.local.parsedWafer
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -37,6 +38,17 @@ class WaferOfflineInputsTest {
         assertEquals(7, wafer.badCount)
         assertEquals(9, wafer.rows)
         assertEquals(9, wafer.cols)
+    }
+
+    @Test fun exportedParquetRoundTripsDenseMaximumGridAndUnicodeIdentifiers() = runBlocking {
+        val bins = List(512) { col -> if (col == 511) 0 else if (col % 7 == 0) 2 else 1 }
+        val source = parsedWafer("批次,甲", "🧪".repeat(64), List(512) { row -> if (row == 511) List(512) { 0 } else bins }, "grid.json")
+        val bytes = WaferParquet.write(context, source.detail)
+        assertEquals("PAR1", String(bytes.copyOfRange(0, 4), Charsets.US_ASCII))
+        val decoded = WaferParquet.parse(context, bytes, "grid.parquet")
+        assertEquals(source.inputHash, decoded.inputHash)
+        assertEquals(source.detail.lotCode, decoded.detail.lotCode)
+        assertEquals(source.detail.waferCode, decoded.detail.waferCode)
     }
 
     @Test fun pngAndJpegProduceTheSameMapAndOnDeviceScores() {

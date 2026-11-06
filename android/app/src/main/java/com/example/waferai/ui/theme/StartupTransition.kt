@@ -1,10 +1,10 @@
 package com.example.waferai.ui.theme
 
+import android.graphics.drawable.Animatable as DrawableAnimation
+import android.view.View
+import android.widget.ImageView
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,12 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -41,27 +38,30 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.waferai.R
-import kotlinx.coroutines.launch
-import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 internal const val StartupDurationMillis = 2500
 private const val ExitDurationMillis = 240
+private const val RevealDurationMillis = 240
+private const val SweepDurationMillis = StartupDurationMillis - ExitDurationMillis
 
-/** Keeps the real home screen initialized behind the skippable launch animation. */
+/** Draws the intro first and mounts the home screen during the native sweep. */
 @Composable
 internal fun StartupTransition(
     enabled: Boolean,
-    ready: Boolean,
     onFinished: () -> Unit,
     content: @Composable () -> Unit
 ) {
     var show by remember { mutableStateOf(enabled) }
+    var showHome by remember { mutableStateOf(!enabled) }
     val finished by rememberUpdatedState(onFinished)
     val finish = {
         if (show) {
+            showHome = true
             show = false
             finished()
         }
@@ -77,20 +77,23 @@ internal fun StartupTransition(
     }
     Box(Modifier.fillMaxSize()) {
         // Keep controls behind the overlay out of accessibility traversal until revealed.
-        Box(if (show) Modifier.clearAndSetSemantics { } else Modifier) { content() }
+        if (showHome) {
+            Box(if (show) Modifier.clearAndSetSemantics { } else Modifier) { content() }
+        }
         if (show) {
             val reveal = remember { Animatable(0f) }
-            val scan = remember { Animatable(0f) }
             val fade = remember { Animatable(0f) }
-            val easeOut = remember { CubicBezierEasing(.23f, 1f, .32f, 1f) }
             val navy = colorResource(R.color.wafer_splash_navy)
             val cyan = colorResource(R.color.wafer_splash_cyan)
             val lift = with(LocalDensity.current) { 12.dp.toPx() }
-            LaunchedEffect(ready) {
-                if (!ready) return@LaunchedEffect
-                launch { reveal.animateTo(1f, tween(240, easing = easeOut)) }
-                scan.animateTo(1f, tween(StartupDurationMillis - ExitDurationMillis, easing = LinearEasing))
-                fade.animateTo(1f, tween(ExitDurationMillis, easing = easeOut))
+            LaunchedEffect(Unit) {
+                val endOfSweep = withFrameNanos { it } + SweepDurationMillis * 1_000_000L
+                reveal.animateTo(1f, tween(RevealDurationMillis, easing = ResponsiveEasing))
+                showHome = true
+                // Rendering the vector sweep is independent of composing the home screen.
+                val remaining = (endOfSweep - withFrameNanos { it }) / 1_000_000L
+                delay(remaining.coerceAtLeast(0L))
+                fade.animateTo(1f, tween(ExitDurationMillis, easing = ResponsiveEasing))
                 finish()
             }
             Box(
@@ -112,16 +115,19 @@ internal fun StartupTransition(
                     scaleY = scaleX
                 }) {
                     Image(painterResource(R.drawable.wafer_launcher_art), null, Modifier.fillMaxSize())
-                    Canvas(Modifier.fillMaxSize()) {
-                        val radius = size.minDimension * .36f
-                        val glow = sin(scan.value * Math.PI).toFloat().coerceIn(0f, 1f)
-                        val origin = Offset(center.x - radius, center.y - radius)
-                        val diameter = Size(radius * 2, radius * 2)
-                        drawArc(cyan.copy(alpha = glow * .12f), -130f + 300f * scan.value,
-                            76f, false, origin, diameter, style = Stroke(9.dp.toPx(), cap = StrokeCap.Round))
-                        drawArc(cyan.copy(alpha = glow), -130f + 300f * scan.value,
-                            76f, false, origin, diameter, style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round))
-                    }
+                    AndroidView(
+                        factory = { context ->
+                            ImageView(context).apply {
+                                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                                setImageResource(R.drawable.wafer_open_scan)
+                                (drawable as DrawableAnimation).start()
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        onReset = null,
+                        onRelease = { (it.drawable as? DrawableAnimation)?.stop() },
+                        update = {}
+                    )
                 }
                 Column(
                     Modifier.offset(y = 136.dp).graphicsLayer {

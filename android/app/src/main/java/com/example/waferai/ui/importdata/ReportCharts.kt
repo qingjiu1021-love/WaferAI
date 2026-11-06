@@ -1,5 +1,6 @@
 package com.example.waferai.ui.importdata
 
+import com.example.waferai.ui.theme.GlassFilterChip as FilterChip
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*

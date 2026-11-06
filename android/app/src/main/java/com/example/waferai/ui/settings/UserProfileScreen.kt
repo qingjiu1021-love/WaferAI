@@ -1,5 +1,6 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import android.app.Application
 import android.graphics.BitmapFactory
 import android.net.Uri

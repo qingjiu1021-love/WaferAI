@@ -27,9 +27,6 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun WaferAITheme(
     appearance: Appearance = Appearance(),
-    animateLaunch: Boolean = false,
-    launchReady: Boolean = true,
-    onLaunchFinished: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val dark = when (appearance.mode) {
@@ -122,7 +119,7 @@ fun WaferAITheme(
         LocalAppLanguage provides language, LocalEnglish provides !language.chinese, LocalLayoutDirection provides direction
     ) {
         MaterialTheme(colorScheme = scheme, typography = typography, shapes = StudioShapes) {
-            if (animateLaunch) StartupTransition(true, launchReady, onLaunchFinished, content) else content()
+            content()
         }
     }
 }

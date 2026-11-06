@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.waferai.data.remote.WaferDetail
 import com.example.waferai.data.remote.WaferPrediction
 import com.example.waferai.data.local.DemoWafer
+import com.example.waferai.data.local.WaferFileFormat
 import com.example.waferai.data.local.WaferImageOptions
 import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.repository.ImportRepository
@@ -42,8 +43,63 @@ data class ImportUiState(
 
 data class GuideUiState(val saving: Boolean = false, val message: String? = null, val error: String? = null)
 
+internal data class ConversionUiState(
+    val wafer: WaferDetail? = null,
+    val busy: Boolean = false,
+    val message: String? = null,
+    val error: String? = null
+)
+
 class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     init { viewModelScope.launch { repository.restoreTraining() } }
+    private val mutableConversion = MutableStateFlow<ConversionUiState?>(null)
+    internal val conversion = mutableConversion.asStateFlow()
+
+    internal fun openConversion() {
+        if (mutableConversion.value == null) useCurrentForConversion()
+    }
+
+    internal fun useCurrentForConversion() {
+        if (mutableConversion.value?.busy != true) {
+            mutableConversion.value = ConversionUiState(wafer = mutableState.value.wafer)
+        }
+    }
+
+    internal fun closeConversion() {
+        if (mutableConversion.value?.busy != true) mutableConversion.value = null
+    }
+
+    internal fun selectConversionFile(uri: Uri) {
+        val state = mutableConversion.value ?: return
+        if (state.busy) return
+        mutableConversion.value = ConversionUiState(busy = true)
+        viewModelScope.launch {
+            try {
+                mutableConversion.value = ConversionUiState(repository.readForConversion(uri))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableConversion.value = ConversionUiState(error = error.message ?: "无法读取晶圆文件。")
+            }
+        }
+    }
+
+    internal fun saveConversion(uri: Uri, format: WaferFileFormat) {
+        val state = mutableConversion.value ?: return
+        val wafer = state.wafer ?: return
+        if (state.busy) return
+        mutableConversion.value = ConversionUiState(wafer, busy = true)
+        viewModelScope.launch {
+            try {
+                repository.convertFile(uri, wafer, format)
+                mutableConversion.value = ConversionUiState(wafer, message = "已保存 ${format.name} 文件。")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableConversion.value = ConversionUiState(wafer, error = error.message ?: "转换或保存失败。")
+            }
+        }
+    }
     private val mutableGuide = MutableStateFlow(GuideUiState())
     val guide = mutableGuide.asStateFlow()
 

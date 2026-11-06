@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Keep the 192dp artwork inside the system's 288dp icon bounds.
-     Fractions stay proportional across display densities (fixed dp insets do not). -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:insetLeft="16.666667%" android:insetTop="16.666667%"
-    android:insetRight="16.666667%" android:insetBottom="16.666667%">
-    <bitmap android:src="@drawable/wafer_launcher_art" android:gravity="fill" />
-</inset>
+<!-- The app draws the wafer as part of its opening animation. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <size android:width="288dp" android:height="288dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>

@@ -1,5 +1,9 @@
 package com.example.waferai.ui.settings
 
+import com.example.waferai.ui.theme.GlassSegmentedTabs
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
+import com.example.waferai.ui.theme.GlassOutlinedButton as OutlinedButton
+import com.example.waferai.ui.theme.GlassDropdownMenu as DropdownMenu
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -69,14 +73,14 @@ internal fun AiProviderEditor(
             }
             StudioHeader(if (draft.id == null) "添加 AI 模型" else "编辑模型提供商", "WAFERAI / MODELS", StudioIcon.AI)
             if (draft.id == null) {
-                TabRow(selectedTabIndex = if (draft.custom) 1 else 0, containerColor = scheme.surfaceContainer) {
-                    Tab(selected = !draft.custom, enabled = enabled,
-                        onClick = { if (draft.custom) viewModel.edit(AiDraft()) },
-                        text = { Text("第三方模型提供商") })
-                    Tab(selected = draft.custom, enabled = enabled,
-                        onClick = { if (!draft.custom) viewModel.edit(AiDraft(provider = AiProvider.CUSTOM)) },
-                        text = { Text("自定义模型 API") })
-                }
+                GlassSegmentedTabs(
+                    listOf("第三方模型提供商", "自定义模型 API"), if (draft.custom) 1 else 0,
+                    onSelect = { index ->
+                        if (index == 0 && draft.custom) viewModel.edit(AiDraft())
+                        if (index == 1 && !draft.custom) viewModel.edit(AiDraft(provider = AiProvider.CUSTOM))
+                    },
+                    enabled = enabled
+                )
             }
             if (draft.custom) {
                 Text("连接中转站、自部署服务或兼容 OpenAI、Anthropic 协议的接口。",

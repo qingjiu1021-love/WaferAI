@@ -1,5 +1,6 @@
 package com.example.waferai.ui.theme
 
+import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,8 +65,7 @@ internal fun WorkspaceMetric(label: String, value: String, modifier: Modifier = 
 internal fun ActionTile(title: String, detail: String, icon: StudioIcon, onClick: () -> Unit,
                         modifier: Modifier = Modifier, enabled: Boolean = true) {
     val scheme = MaterialTheme.colorScheme
-    Surface(onClick, modifier.fillMaxWidth(), enabled = enabled, shape = RoundedCornerShape(20.dp),
-        color = scheme.surfaceContainer, border = BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f))) {
+    GlassActionSurface(onClick, modifier.fillMaxWidth(), RoundedCornerShape(20.dp), enabled) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             StudioBadge(icon, 36)
             Text(title, style = MaterialTheme.typography.titleSmall)

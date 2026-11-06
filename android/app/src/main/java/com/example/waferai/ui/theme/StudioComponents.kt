@@ -37,16 +37,18 @@ import kotlin.math.abs
 
 internal enum class StudioIcon {
     WAFER, DATA, AI, TOOLS, FILE, THEME, LANGUAGE, BACKUP, ARROW, SEND, BOOK, TRAINING, PLUG, PLUS, MEMORY, MENU,
-    CAMERA, PHOTO, ATTACH, THINK, CLOCK, CHECK, PERSON
+    CAMERA, PHOTO, ATTACH, THINK, CLOCK, CHECK, PERSON, CONVERT
 }
 
 @Composable
-internal fun StudioHeader(title: String, section: String, icon: StudioIcon, modifier: Modifier = Modifier) {
+internal fun StudioHeader(title: String, section: String, icon: StudioIcon, modifier: Modifier = Modifier,
+                          compact: Boolean = false,
+                          action: (@Composable () -> Unit)? = null) {
     val scheme = MaterialTheme.colorScheme
-    Row(modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
+    Row(modifier.fillMaxWidth().padding(vertical = if (compact) 7.dp else 10.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineLarge)
+            Text(title, style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge)
             val subtitle = when (icon) {
                 StudioIcon.WAFER -> if (LocalEnglish.current) "Import. Inspect. Understand." else "导入、检测，发现每一片的价值"
                 StudioIcon.DATA -> if (LocalEnglish.current) "Your results, at a glance" else "从每一次检测，发现趋势"
@@ -57,7 +59,7 @@ internal fun StudioHeader(title: String, section: String, icon: StudioIcon, modi
             if (subtitle.isNotBlank()) Text(subtitle, color = scheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
         }
-        StudioBadge(icon, size = 36)
+        if (action != null) action() else if (!compact) StudioBadge(icon, size = 36)
     }
 }
 
@@ -106,7 +108,7 @@ internal fun StudioBadge(icon: StudioIcon, size: Int = 36) {
     val accent = when (icon) {
         StudioIcon.BOOK, StudioIcon.MEMORY -> Color(0xFFAF74EA)
         StudioIcon.TRAINING, StudioIcon.DATA -> Color(0xFF38AA8C)
-        StudioIcon.FILE, StudioIcon.CLOCK -> Color(0xFFDB9754)
+        StudioIcon.FILE, StudioIcon.CLOCK, StudioIcon.CONVERT -> Color(0xFFDB9754)
         else -> scheme.primary
     }
     Box(Modifier.size(size.dp).background(accent.copy(alpha = 0.12f), RoundedCornerShape((size / 3).dp)),
@@ -165,6 +167,12 @@ internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = Ma
             StudioIcon.FILE -> {
                 rect(5f, 3f, 14f, 18f)
                 line(9f, 9f, 15f, 9f); line(9f, 13f, 15f, 13f); line(9f, 17f, 13f, 17f)
+            }
+            StudioIcon.CONVERT -> {
+                line(4f, 8f, 20f, 8f)
+                line(16f, 4f, 20f, 8f); line(20f, 8f, 16f, 12f)
+                line(20f, 16f, 4f, 16f)
+                line(8f, 12f, 4f, 16f); line(4f, 16f, 8f, 20f)
             }
             StudioIcon.THEME -> {
                 drawCircle(color, 5.5f * u, point(12f, 12f), style = Stroke(stroke))

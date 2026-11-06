@@ -1,7 +1,7 @@
 package com.example.waferai.ui.theme
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -13,11 +13,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -37,22 +38,29 @@ internal fun Modifier.glassSurface(
     if (level == GlassLevel.NONE) return clip(shape).background(tint)
 
     val intense = level == GlassLevel.INTENSE
-    val highlight = if (intense) 0.09f else 0.025f
-    val safeHighlight = if (!dark && tint.luminance() < 0.18f) highlight * 0.45f else highlight
+    val highlight = if (intense) 0.11f else 0.055f
+    val safeHighlight = if (tint.luminance() < 0.18f) highlight * 0.6f else highlight
     val fill = Brush.verticalGradient(
         0f to lerp(tint, Color.White, safeHighlight).copy(alpha = opacity),
-        0.48f to tint.copy(alpha = opacity * if (intense) 0.84f else 0.93f),
-        1f to tint.copy(alpha = opacity)
+        0.52f to tint.copy(alpha = opacity * if (intense) 0.83f else 0.93f),
+        1f to lerp(tint, accent, 0.07f).copy(alpha = opacity)
     )
-    val rim = Brush.verticalGradient(
-        0f to Color.White.copy(alpha = if (intense) 0.32f else 0.16f),
-        0.48f to Color.White.copy(alpha = 0.05f),
-        1f to accent.copy(alpha = if (intense) 0.16f else 0.08f)
+    val rim = Brush.linearGradient(
+        0f to Color.White.copy(alpha = if (intense) 0.58f else 0.32f),
+        0.48f to Color.White.copy(alpha = if (dark) 0.09f else 0.22f),
+        1f to accent.copy(alpha = if (intense) 0.30f else 0.17f)
     )
-    return shadow(if (intense) 8.dp else 3.dp, shape)
-        .clip(shape)
+    return shadow(if (intense) 7.dp else 3.dp, shape)
         .background(fill)
-        .border(0.5.dp, rim, shape)
+        .drawWithCache {
+            val sheen = Brush.radialGradient(
+                listOf(Color.White.copy(alpha = if (intense) 0.15f else 0.08f), Color.Transparent),
+                center = Offset(size.width * 0.17f, -size.height * 0.25f),
+                radius = size.width.coerceAtLeast(size.height).coerceAtLeast(1f) * 0.65f
+            )
+            onDrawBehind { drawRect(sheen) }
+        }
+        .border(0.7.dp, rim, shape)
 }
 
 @Composable
@@ -68,12 +76,6 @@ fun GlassButton(
     val level = if (enabled) LocalGlassLevel.current else GlassLevel.NONE
     val shape = RoundedCornerShape(50)
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = tween(if (pressed) 65 else 135),
-        label = "glass press"
-    )
     val tint = when {
         !enabled -> scheme.surfaceVariant
         prominent -> scheme.primary
@@ -82,10 +84,8 @@ fun GlassButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }.glassSurface(tint, scheme.primary, shape, level, dark),
+        modifier = modifier.glassPress(interaction, level)
+            .glassSurface(tint, scheme.primary, shape, level, dark),
         shape = shape,
         interactionSource = interaction,
         elevation = null,
@@ -98,4 +98,17 @@ fun GlassButton(
         ),
         content = content
     )
+}
+
+@Composable
+internal fun Modifier.glassPress(interaction: MutableInteractionSource, level: GlassLevel): Modifier {
+    if (level == GlassLevel.NONE || !android.animation.ValueAnimator.areAnimatorsEnabled()) return this
+    val pressed = interaction.collectIsPressedAsState()
+    val lift = animateFloatAsState(if (pressed.value) 1f else 0f, spring(0.68f, 340f), label = "glass press")
+    return graphicsLayer {
+        val amount = lift.value
+        scaleX = 1f + amount * 0.035f
+        scaleY = 1f + amount * 0.035f
+        translationY = -1.dp.toPx() * amount
+    }
 }

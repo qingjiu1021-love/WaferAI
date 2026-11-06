@@ -8,3 +8,7 @@
 - GitHub 发布的是毕业设计测试包，沿用本机测试签名；正式商用或应用商店发行应单独规划正式签名、审核后的政策与服务配置。
 
 - 4.6.0 内置的 27 张真实演示样本参考 wafertools/wafermap 固定版本，来源、映射规则和数据集许可边界见 docs/wafertools真实演示样本.md；随包保留 Paul Robins 的 MIT 声明。
+
+- 4.10.0 的导航胶囊和分级玻璃参考 FlClash（GPL-3.0）提交 7c9627ff 的交互设计，使用独立的 Jetpack Compose 实现。Parquet 导出使用 hyparquet-writer 0.18.0 与 hyparquet 1.32.0（MIT）。版本锁定和入口在 `scripts/parquet-writer`，许可证随包置于 `assets/licenses`。
+
+- 4.10.2 的底栏继续以 Jetpack Compose 实现，采用 FlClash 同一提交的弹簧参数、速度形变公式和滑动时序。来源见 [FlClash 的 navigation_dock.dart](https://github.com/chen08209/FlClash/blob/7c9627fffb35f2615fbfaa64b4b3a0c5834c52ed/lib/ui/navigation_dock.dart)。
