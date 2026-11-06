@@ -43,6 +43,7 @@ import java.nio.charset.CodingErrorAction
 class ImportRepository(private val context: Context) {
     private val resolver = context.contentResolver
     val store = LocalWaferStore(context)
+    internal val testHistory by lazy { com.example.waferai.data.local.WaferTestHistory(context) }
     internal val operationLog = OperationLog(context)
     val predictor = MobilePredictor(context)
     val aiProfiles = AiProfileStore(context)
@@ -132,8 +133,12 @@ class ImportRepository(private val context: Context) {
         }
     }
     suspend fun loadDemo(sample: DemoWafer) = logged(LogOperation.IMPORT) {
+        store.saveParsed(readDemo(sample))
+    }
+
+    internal suspend fun readDemo(sample: DemoWafer): ParsedWafer = withContext(Dispatchers.IO) {
         val bytes = context.assets.open("samples/${sample.filename}").use { it.readBytes() }
-        store.importJson(bytes, sample.filename)
+        WaferJson.parse(bytes, sample.filename)
     }
 
     suspend fun saveGuideFile(uri: Uri, file: com.example.waferai.data.local.GuideFile) = withContext(Dispatchers.IO) {

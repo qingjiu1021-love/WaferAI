@@ -110,7 +110,7 @@ import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
 import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.mutableIntStateOf
 
-private enum class Page { OVERVIEW, WAFER, DATA, HISTORY, LOTS, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
+private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
 
 private val tabs = listOf(
     Page.WAFER to "晶圆",
@@ -184,6 +184,9 @@ class MainActivity : ComponentActivity() {
     private val lotViewModel: LotViewModel by viewModels { LotViewModel.Factory(repository) }
     private val historyViewModel: HistoryViewModel by viewModels { HistoryViewModel.Factory(repository) }
     private val importViewModel: ImportViewModel by viewModels { ImportViewModel.Factory(repository) }
+    private val waferTestViewModel: com.example.waferai.ui.importdata.WaferTestViewModel by viewModels {
+        com.example.waferai.ui.importdata.WaferTestViewModel.Factory(repository)
+    }
     private val backupViewModel: BackupViewModel by viewModels { BackupViewModel.Factory(repository) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -296,7 +299,7 @@ class MainActivity : ComponentActivity() {
                             Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
                             Page.PLUGINS -> if (pluginReturn == Page.AI || pluginReturn == Page.CHAT) Page.AI else Page.TOOLS
                             Page.TASKS -> Page.AI
-                            Page.OVERVIEW -> Page.WAFER
+                            Page.OVERVIEW, Page.WAFER_TEST -> Page.WAFER
                             Page.MODELS -> when (modelReturn) {
                                 Page.WAFER -> Page.WAFER
                                 Page.PROFILE -> Page.PROFILE
@@ -312,9 +315,16 @@ class MainActivity : ComponentActivity() {
                     when {
                         backup.busy -> Unit
                         aiState.draft != null -> aiViewModel.close()
+                        page == Page.WAFER_TEST -> navigation.navigate(Page.WAFER)
                         page == Page.WAFER && waferReturn != null -> {
                             navigation.navigate(waferReturn ?: Page.DATA)
                             waferReturn = null
+                        }
+                        (page == Page.WAFER || page == Page.OVERVIEW) && importState.wafer != null -> {
+                            if (importViewModel.returnToWorkspace()) {
+                                waferScreenRevision++
+                                scrollStates.removeState(page.name)
+                            }
                         }
                         page == Page.HISTORY -> navigation.navigate(if (lotId == null) historyReturn else Page.LOTS)
                         page == Page.LOTS || page == Page.TREND -> navigation.navigate(Page.DATA)
@@ -360,7 +370,7 @@ class MainActivity : ComponentActivity() {
                 }
                 PageEffects(pageState) { current ->
                     BackHandler(enabled = backup.busy || aiState.draft != null || current != appearance.startTab.page() ||
-                        (current == Page.WAFER && waferReturn != null), onBack = goBack)
+                        (current == Page.WAFER && (waferReturn != null || importState.wafer != null)), onBack = goBack)
                     LaunchedEffect(accountState.message, current) {
                         if (current != Page.ACCOUNT && accountState.error) {
                             accountState.message?.let { settingsSnackbar.showSnackbar(it) }
@@ -410,7 +420,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    uri?.let(importViewModel::importFile)
+                    uri?.let {
+                        waferReturn = null
+                        importViewModel.importFile(it)
+                    }
                 }
                 val guideJsonSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
                     uri?.let { importViewModel.saveGuideFile(it, com.example.waferai.data.local.GuideFile.JSON) }
@@ -435,6 +448,7 @@ class MainActivity : ComponentActivity() {
                 selectedImage?.let { uri ->
                     WaferImageDialog(onDismiss = { selectedImage = null }) { options ->
                         selectedImage = null
+                        waferReturn = null
                         importViewModel.importImage(uri, options, appearance.yieldThreshold)
                     }
                 }
@@ -457,7 +471,7 @@ class MainActivity : ComponentActivity() {
                     derivedStateOf {
                         val current = page
                         current != Page.APPEARANCE && current != Page.CHAT && aiState.draft == null &&
-                            !backup.busy && !(current == Page.AI && ime.getBottom(density) > 0)
+                            !backup.busy && !(current in setOf(Page.AI, Page.WAFER_TEST) && ime.getBottom(density) > 0)
                     }
                 }
                 val floatingGlass = appearance.bottomBar == BottomBarStyle.FLOATING &&
@@ -660,20 +674,27 @@ class MainActivity : ComponentActivity() {
                                         onBack = goBack,
                                         modifier = modifier
                                     )
+                                    Page.WAFER_TEST -> com.example.waferai.ui.importdata.WaferTestScreen(
+                                        waferTestViewModel, importState.wafer, goBack, modifier
+                                    )
                                     Page.OVERVIEW, Page.WAFER -> WaferHomeScreen(
                                         importState = importState,
                                         onOpenConverter = importViewModel::openConversion,
+                                        onOpenTest = { navigation.navigate(Page.WAFER_TEST) },
                                         tabMotion = appearance.tabMotion,
                                         guideState = guideState, onSaveGuideFile = saveGuideFile,
                                         overview = overview, onHistory = openHistory, onOpenWafer = openWafer,
-                                        onBack = goBack.takeIf { waferReturn != null },
+                                        onBack = goBack.takeIf { waferReturn != null || importState.wafer != null },
                                         onSelectFile = { picker.launch(arrayOf("*/*")) },
                                         onSelectImage = { imagePicker.launch(arrayOf("image/*")) },
                                         onPredict = { importViewModel.inspectWafer(appearance.yieldThreshold) },
                                         onPredictTrained = if (training == null) null else {
                                             { importViewModel.inspectWafer(appearance.yieldThreshold, trained = true) }
                                         },
-                                        onLoadDemo = importViewModel::loadDemo,
+                                        onLoadDemo = { sample ->
+                                            waferReturn = null
+                                            importViewModel.loadDemo(sample)
+                                        },
                                         onAnalyze = { importViewModel.analyzeWafer(appearance.analysisPreset, appearance.yieldThreshold) },
                                         analysisPreset = appearance.analysisPreset,
                                         onAnalysisPreset = { saveAppearance(appearance.copy(analysisPreset = it)) },

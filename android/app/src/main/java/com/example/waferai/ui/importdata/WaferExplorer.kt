@@ -163,6 +163,7 @@ internal fun WaferExplorer(
     focusRevision: Int = 0,
     onClearFocus: () -> Unit = {},
     preparedFailures: IntArray? = null,
+    selectedDetail: ((row: Int, col: Int) -> String?)? = null,
     onFilterChange: (WaferMapFilter) -> Unit
 ) {
     var viewport by remember(wafer.id, MatrixIdentity(wafer.map)) { mutableStateOf(Viewport()) }
@@ -321,6 +322,9 @@ internal fun WaferExplorer(
             modifier = Modifier.padding(vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant
         )
+        die?.let { selectedDetail?.invoke(it.row, it.column) }?.let { detail ->
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = scheme.primary)
+        }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Legend(if (focus != null) lerp(mapBackground, GoodColor, 0.18f) else if (filter == WaferMapFilter.FAIL) muted else GoodColor, "合格")

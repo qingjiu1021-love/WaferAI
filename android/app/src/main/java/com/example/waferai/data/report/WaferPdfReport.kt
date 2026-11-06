@@ -28,7 +28,9 @@ data class ReportSnapshot(
     val prediction: WaferPrediction?,
     val requestedAt: Instant = Instant.now(),
     val analysis: AiAnalysis? = null,
-    val inspection: InspectionRecord? = null
+    val inspection: InspectionRecord? = null,
+    val testSource: String? = null,
+    val testCompletedAt: Instant? = null
 ) {
     fun suggestedFilename(): String {
         val safe = "${wafer.lotCode}_${wafer.waferCode}"
@@ -280,7 +282,14 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
                 .withZone(ZoneId.of("Asia/Shanghai")).format(snapshot.requestedAt)
             paragraph("报告时间（北京时间）：$time", 9f, muted)
             paragraph("批次：${snapshot.wafer.lotCode}", bold = true)
-            paragraph("晶圆编号：${snapshot.wafer.waferCode}    记录编号：${snapshot.wafer.id}")
+            val record = if (snapshot.wafer.id > 0) "    记录编号：${snapshot.wafer.id}" else ""
+            paragraph("晶圆编号：${snapshot.wafer.waferCode}$record")
+            snapshot.testSource?.let { paragraph("测试来源：$it", 10f, blue, true) }
+            snapshot.testCompletedAt?.let {
+                val completed = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZone(ZoneId.of("Asia/Shanghai")).format(it)
+                paragraph("测试完成（北京时间）：$completed", 9f, muted)
+            }
             paragraph("来源文件：${snapshot.wafer.filename}", 9.5f, muted)
             y += 3f
             statistics()

@@ -61,6 +61,7 @@ import androidx.compose.runtime.key
 import com.example.waferai.ui.theme.GlassButton
 import com.example.waferai.ui.theme.BackButton
 import com.example.waferai.ui.theme.StudioHeader
+import com.example.waferai.ui.theme.StudioAction
 import com.example.waferai.ui.theme.StudioGlyph
 import com.example.waferai.ui.theme.TabMotion
 import com.example.waferai.ui.theme.tabTransition
@@ -78,6 +79,7 @@ private val waferPanelLabels = WaferPanel.entries.map { it.label }
 fun WaferHomeScreen(
     importState: ImportUiState,
     onOpenConverter: () -> Unit,
+    onOpenTest: () -> Unit,
     tabMotion: TabMotion,
     guideState: GuideUiState,
     onSaveGuideFile: (com.example.waferai.data.local.GuideFile) -> Unit,
@@ -138,7 +140,7 @@ fun WaferHomeScreen(
         modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        onBack?.let { BackButton(it) }
+        onBack?.let { BackButton(it, enabled = !busy) }
         StudioHeader("晶圆工作台", "WAFERAI / WORKSPACE", StudioIcon.WAFER, compact = true, action = {
             val label = if (LocalEnglish.current) "Convert wafer file" else "晶圆文件转换"
             IconButton(onOpenConverter, modifier = Modifier.semantics { contentDescription = label }) {
@@ -147,6 +149,7 @@ fun WaferHomeScreen(
         })
         if (wafer == null) {
             WorkspaceIntro(onSelectFile, onSelectImage, { showDemoPicker = true }, { showGuide = true }, enabled = !busy)
+            StudioAction("晶圆测试", "模拟电测 · 历史结果回放", StudioIcon.DATA, onOpenTest)
             StudioPanel(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     WorkspaceMetric("已存晶圆", overview?.wafers?.toString() ?: "—", Modifier.weight(1f))
@@ -179,6 +182,7 @@ fun WaferHomeScreen(
                     }
                 }
             }
+            TextButton(onOpenTest) { Text("晶圆测试") }
             GlassSegmentedTabs(waferPanelLabels, panel.ordinal, { panel = WaferPanel.entries[it] })
             val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
             AnimatedContent(

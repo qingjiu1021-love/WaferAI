@@ -23,11 +23,13 @@ import com.example.waferai.ui.theme.UiText as Text
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DemoWaferPicker(busy: Boolean, onSelect: (DemoWafer) -> Unit, onDismiss: () -> Unit) {
+internal fun DemoWaferPicker(busy: Boolean, onSelect: (DemoWafer) -> Unit, onDismiss: () -> Unit, realOnly: Boolean = false) {
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<DemoCategory?>(null) }
     var sourceError by rememberSaveable { mutableStateOf(false) }
-    val visible = remember(query, category) { DemoWafer.search(query, category) }
+    val visible = remember(query, category, realOnly) {
+        DemoWafer.search(query, category).filter { !realOnly || it.isReal }
+    }
     val list = rememberLazyListState()
     val uri = LocalUriHandler.current
     val scheme = MaterialTheme.colorScheme
@@ -37,15 +39,18 @@ internal fun DemoWaferPicker(busy: Boolean, onSelect: (DemoWafer) -> Unit, onDis
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.88f).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("选择演示晶圆", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Text(if (realOnly) "选择 WM-811K 回放样本" else "选择演示晶圆",
+                    Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                 TextButton(onDismiss) { Text("关闭") }
             }
-            Text("27 张真实样本 · 9 类标注 · 3 张人工演示", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+            Text(if (realOnly) "27 张真实样本 · 9 类标注" else "27 张真实样本 · 9 类标注 · 3 张人工演示",
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
             OutlinedTextField(query, { query = it.take(80) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("demo-search"),
                 label = { Text("搜索类别、批次或晶圆编号") })
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("demo-categories")) {
                 item { FilterChip(category == null, { category = null }, label = { Text("全部") }) }
-                items(DemoCategory.entries.sortedBy { if (it == DemoCategory.SYNTHETIC) 1 else 0 }) { value ->
+                items(DemoCategory.entries.filter { !realOnly || it != DemoCategory.SYNTHETIC }
+                    .sortedBy { if (it == DemoCategory.SYNTHETIC) 1 else 0 }) { value ->
                     FilterChip(category == value, { category = value }, label = { Text(value.title) })
                 }
             }

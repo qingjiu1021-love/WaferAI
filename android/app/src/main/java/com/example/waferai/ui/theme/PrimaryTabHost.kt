@@ -181,6 +181,8 @@ internal fun <T : Any> PrimaryTabHost(
                         item.place(0, 0)
                     } else if (anchor != null) {
                         item.placeWithLayer(0, 0, zIndex = if (slot == page) 1f else 0f) {
+                            // A closed drawer may still draw outside its own tab as it slides.
+                            clip = true
                             val offset = anchor - navigation.position.coerceIn(first, last)
                             if (motion == TabMotion.FADE) {
                                 alpha = (1f - abs(offset)).coerceIn(0f, 1f)

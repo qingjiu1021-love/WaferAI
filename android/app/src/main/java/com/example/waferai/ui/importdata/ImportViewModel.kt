@@ -159,6 +159,14 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         mutableState.value = ImportUiState()
     }
 
+    fun returnToWorkspace(): Boolean {
+        val current = mutableState.value
+        if (current.loading || current.predicting || current.exporting || current.analyzing) return false
+        pendingReport = null
+        mutableState.value = ImportUiState()
+        return true
+    }
+
     fun openWafer(waferId: Int): Boolean {
         val current = mutableState.value
         if (current.loading || current.predicting || current.exporting || current.analyzing) return false
