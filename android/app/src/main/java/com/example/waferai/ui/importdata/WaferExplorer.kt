@@ -79,9 +79,9 @@ private val GoodColor = Color(0xFF2E7D32)
 private val BadColor = Color(0xFFD32F2F)
 private const val MaxZoom = 16f
 
-private data class Die(val row: Int, val column: Int)
+internal data class Die(val row: Int, val column: Int)
 
-private data class MapFrame(val origin: Offset, val cell: Float) {
+internal data class MapFrame(val origin: Offset, val cell: Float) {
     fun dieAt(tap: Offset, rows: Int, columns: Int): Die? {
         if (cell <= 0) return null
         val column = floor((tap.x - origin.x) / cell).toInt()
@@ -90,22 +90,27 @@ private data class MapFrame(val origin: Offset, val cell: Float) {
     }
 }
 
-private data class Viewport(val scale: Float = 1f, val pan: Offset = Offset.Zero) {
-    fun frame(size: IntSize, wafer: WaferDetail): MapFrame {
-        val cell = fittedCell(size, wafer) * scale
+internal data class Viewport(val scale: Float = 1f, val pan: Offset = Offset.Zero) {
+    fun frame(size: IntSize, wafer: WaferDetail) = frame(size, wafer.rows, wafer.cols)
+
+    fun frame(size: IntSize, rows: Int, cols: Int): MapFrame {
+        val cell = fittedCell(size, rows, cols) * scale
         return MapFrame(
-            Offset((size.width - wafer.cols * cell) / 2f, (size.height - wafer.rows * cell) / 2f) + pan,
+            Offset((size.width - cols * cell) / 2f, (size.height - rows * cell) / 2f) + pan,
             cell
         )
     }
 
-    fun transform(size: IntSize, wafer: WaferDetail, multiplier: Float, movement: Offset): Viewport {
+    fun transform(size: IntSize, wafer: WaferDetail, multiplier: Float, movement: Offset) =
+        transform(size, wafer.rows, wafer.cols, multiplier, movement)
+
+    fun transform(size: IntSize, rows: Int, cols: Int, multiplier: Float, movement: Offset): Viewport {
         val nextScale = (scale * multiplier).coerceIn(1f, MaxZoom)
         if (nextScale == 1f) return Viewport()
         val requested = pan * (nextScale / scale) + movement
-        val nextCell = fittedCell(size, wafer) * nextScale
-        val limitX = ((nextCell * wafer.cols - size.width) / 2f).coerceAtLeast(0f)
-        val limitY = ((nextCell * wafer.rows - size.height) / 2f).coerceAtLeast(0f)
+        val nextCell = fittedCell(size, rows, cols) * nextScale
+        val limitX = ((nextCell * cols - size.width) / 2f).coerceAtLeast(0f)
+        val limitY = ((nextCell * rows - size.height) / 2f).coerceAtLeast(0f)
         return Viewport(
             nextScale,
             Offset(requested.x.coerceIn(-limitX, limitX), requested.y.coerceIn(-limitY, limitY))
@@ -114,7 +119,10 @@ private data class Viewport(val scale: Float = 1f, val pan: Offset = Offset.Zero
 }
 
 private fun fittedCell(size: IntSize, wafer: WaferDetail) =
-    minOf(size.width.toFloat() / wafer.cols, size.height.toFloat() / wafer.rows)
+    fittedCell(size, wafer.rows, wafer.cols)
+
+private fun fittedCell(size: IntSize, rows: Int, cols: Int) =
+    minOf(size.width.toFloat() / cols, size.height.toFloat() / rows)
 
 private data class RasterKey(val matrix: MatrixIdentity, val focus: MatrixIdentity, val palette: List<Int>)
 
@@ -352,7 +360,7 @@ internal fun WaferExplorer(
 }
 
 @Composable
-private fun ZoomControls(scale: () -> Float, onZoom: (Float) -> Unit, onReset: () -> Unit) {
+internal fun ZoomControls(scale: () -> Float, onZoom: (Float) -> Unit, onReset: () -> Unit) {
     // Read gesture state in this small scope; panning now invalidates drawing only.
     val currentScale by rememberUpdatedState(scale)
     val percent by remember { androidx.compose.runtime.derivedStateOf { (currentScale() * 100).roundToInt() } }

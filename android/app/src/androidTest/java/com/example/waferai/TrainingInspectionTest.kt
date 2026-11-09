@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.waferai.data.local.LocalWaferStore
 import com.example.waferai.data.local.MobilePredictor
 import com.example.waferai.data.local.WaferTrainer
+import com.example.waferai.data.local.WaferSource
 import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.report.WaferPdfReport
 import com.google.gson.JsonParser
@@ -65,13 +66,31 @@ class TrainingInspectionTest {
         try {
             val wafer = LocalWaferStore(context, old).use { store ->
                 val saved = store.importJson(sample(), "demo.json").wafer
-                store.writableDatabase.execSQL("DROP TABLE inspections")
-                store.writableDatabase.version = 1
+                val db = store.writableDatabase
+                db.setForeignKeyConstraintsEnabled(false)
+                db.execSQL("DROP TABLE inspections")
+                db.execSQL("""
+                    CREATE TABLE wafers_v1(
+                        id INTEGER PRIMARY KEY, lot_id INTEGER NOT NULL REFERENCES lots(id), wafer_code TEXT NOT NULL,
+                        filename TEXT NOT NULL, rows INTEGER NOT NULL, cols INTEGER NOT NULL,
+                        good_count INTEGER NOT NULL, bad_count INTEGER NOT NULL, map_json TEXT NOT NULL,
+                        input_hash TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(lot_id,wafer_code))
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO wafers_v1 SELECT id,lot_id,wafer_code,filename,rows,cols,good_count,bad_count,map_json,input_hash,created_at
+                    FROM wafers
+                """.trimIndent())
+                db.execSQL("DROP TABLE wafers")
+                db.execSQL("ALTER TABLE wafers_v1 RENAME TO wafers")
+                db.version = 1
                 saved
             }
             LocalWaferStore(context, old).use { source ->
-                assertEquals(wafer, source.detail(wafer.id))
+                assertEquals(wafer.copy(source = WaferSource.UNKNOWN), source.detail(wafer.id))
                 assertNull(source.latestInspection(wafer.id))
+                val reimported = source.importJson(sample(), "demo.json")
+                assertTrue(reimported.alreadyImported)
+                assertEquals(wafer, reimported.wafer)
                 val prediction = MobilePredictor(context).predict(wafer)
                 source.saveInspection(prediction, 80)
                 val latest = source.saveInspection(prediction, 90)
@@ -83,7 +102,13 @@ class TrainingInspectionTest {
                 LocalWaferStore(context, restored).use { target ->
                     assertEquals(1, target.restoreBackup(backup.reader()) {})
                     assertEquals(latest, target.latestInspection(wafer.id))
+                    assertEquals(WaferSource.GRID_FILE, target.detail(wafer.id).sourceKind)
                     val legacy = JsonParser.parseString(backup).asJsonObject
+                    legacy.getAsJsonArray("wafers").forEach { row -> row.asJsonArray.remove(row.asJsonArray.size() - 1) }
+                    legacy.addProperty("version", 2)
+                    assertEquals(1, target.restoreBackup(legacy.toString().reader()) {})
+                    assertEquals(WaferSource.UNKNOWN, target.detail(wafer.id).sourceKind)
+                    assertEquals(latest, target.latestInspection(wafer.id))
                     legacy.addProperty("version", 1)
                     legacy.remove("inspections")
                     assertEquals(1, target.restoreBackup(legacy.toString().reader()) {})

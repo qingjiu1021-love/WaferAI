@@ -38,8 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.waferai.data.analysis.WaferMapFilter
 import com.example.waferai.data.local.DemoWafer
+import com.example.waferai.data.local.WaferTestComparison
 import com.example.waferai.data.local.WaferTestHistory
 import com.example.waferai.data.local.WaferTestPlan
+import com.example.waferai.data.local.testLimitText
 import com.example.waferai.data.remote.WaferDetail
 import com.example.waferai.ui.theme.BackButton
 import com.example.waferai.ui.theme.GlassButton
@@ -58,7 +60,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-private val testModes = listOf(WaferTestPlan.SIMULATION, WaferTestPlan.REPLAY)
+private val testModes = listOf("教学仿真", WaferTestPlan.REPLAY)
 private val resultTabs = listOf("晶圆图", "检测图表")
 private val passColor = Color(0xFF2E9C52)
 private val failColor = Color(0xFFE2535B)
@@ -70,6 +72,7 @@ internal fun WaferTestScreen(viewModel: WaferTestViewModel, current: WaferDetail
     val state by viewModel.state.collectAsStateWithLifecycle()
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var limit by rememberSaveable { mutableStateOf("10") }
+    var comparisonLimit by rememberSaveable { mutableStateOf("15") }
     var sample by rememberSaveable { mutableStateOf(DemoWafer.WM_CENTER_1) }
     var showSamples by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
@@ -98,35 +101,40 @@ internal fun WaferTestScreen(viewModel: WaferTestViewModel, current: WaferDetail
             .padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        BackButton(onBack)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("晶圆测试", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            BackButton(onBack)
             GlassTextButton({ focus.clearFocus(); showHistory = true }, enabled = !state.busy) { Text("测试历史") }
         }
+        Text("测试仿真与结果回放", style = MaterialTheme.typography.headlineMedium)
         if (state.openingRecord) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (plan == null && !state.busy) {
-            Text("从逐颗判定到缺陷识别和分析报告。模拟测量与历史回放在手机本地运行。",
+            Text("比较两种测试上限，或回放已有晶圆结果。晶圆图、AI 分类与报告均在本机生成。",
                 style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
             GlassSegmentedTabs(testModes, mode, { mode = it })
             StudioPanel(Modifier.fillMaxWidth()) {
                 if (mode == 0) {
-                    Text("漏电流 · 21 × 21 网格", style = MaterialTheme.typography.titleMedium)
-                    Text("使用软件生成的读数练习。读数小于或等于上限时判为合格，非芯片区域跳过。",
+                    Text("漏电流仿真 · 21 × 21 网格", style = MaterialTheme.typography.titleMedium)
+                    Text("同一组仿真读数分别按两个上限判定。读数不超过上限即合格，非芯片区域跳过。",
                         style = MaterialTheme.typography.bodyMedium)
-                    val upper = limit.replace(',', '.').toDoubleOrNull()?.takeIf { it in 0.1..100.0 }
-                    OutlinedTextField(limit, { limit = it.take(8) },
-                        label = { Text("合格上限（µA）") },
-                        supportingText = { Text("演示范围 0.1～100 µA") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = upper == null, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    val upper = parseTestLimit(limit)
+                    val alternate = parseTestLimit(comparisonLimit)
+                    TestLimitField("基准上限（µA）", limit, { limit = it }, upper != null)
+                    TestLimitField("对比上限（µA）", comparisonLimit, { comparisonLimit = it }, alternate != null)
+                    Text("可设 0.1～100 µA。晶圆图、图表和 AI 分类按基准上限生成。",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     GlassButton({
-                        upper?.let { focus.clearFocus(); viewModel.simulate(it) }
-                    }, Modifier.fillMaxWidth(), enabled = upper != null, prominent = true) { Text("开始模拟测试") }
+                        if (upper != null && alternate != null) {
+                            focus.clearFocus()
+                            viewModel.simulate(upper, alternate)
+                        }
+                    }, Modifier.fillMaxWidth(), enabled = upper != null && alternate != null, prominent = true) {
+                        Text("开始模拟测试")
+                    }
                 } else {
                     Text("WM-811K 历史样本", style = MaterialTheme.typography.titleMedium)
                     Text(sample.description, style = MaterialTheme.typography.bodyMedium)
-                    Text("逐颗显示原有合格状态，并在回放完成后运行本地 AI 分类。",
+                    Text("逐颗回放原有合格状态，完成后运行本地 AI 分类。此模式只读取合格状态。",
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     GlassTextButton({ showSamples = true }) { Text("选择回放样本") }
                     GlassButton({ viewModel.replay(sample) }, Modifier.fillMaxWidth(), prominent = true) { Text("开始回放") }
@@ -137,7 +145,7 @@ internal fun WaferTestScreen(viewModel: WaferTestViewModel, current: WaferDetail
             }
         }
         if (plan != null) {
-            StatusPill(plan.mode)
+            StatusPill(if (plan.mode == WaferTestPlan.SIMULATION) "仿真数据" else plan.mode)
             Text(plan.source, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
         }
         if (state.running) {
@@ -170,13 +178,15 @@ internal fun WaferTestScreen(viewModel: WaferTestViewModel, current: WaferDetail
                     Text(testDate.format(it) + if (state.recorded) " · 已存入测试历史" else "",
                         style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                 }
-                Text("良率 " + String.format(Locale.ROOT, "%.2f%%", wafer.yieldRate * 100),
+                val yieldLabel = if (plan.comparison != null) "基准良率 " else "良率 "
+                Text(yieldLabel + String.format(Locale.ROOT, "%.2f%%", wafer.yieldRate * 100),
                     style = MaterialTheme.typography.headlineSmall, color = colors.primary)
                 Text("合格 ${wafer.goodCount} · 不合格 ${wafer.badCount} · 有效 ${wafer.totalCount}",
                     style = MaterialTheme.typography.bodySmall)
                 state.prediction?.let {
                     Text("AI 缺陷模式 · ${it.labelZh}（${it.label}）", style = MaterialTheme.typography.titleSmall)
                 }
+                plan.comparison?.let { ThresholdComparison(it) }
                 GlassButton({
                     viewModel.prepareReport()?.let { filename ->
                         runCatching { reportPicker.launch(filename) }.onFailure { viewModel.export(null) }
@@ -195,6 +205,65 @@ internal fun WaferTestScreen(viewModel: WaferTestViewModel, current: WaferDetail
     }
 }
 
+private fun parseTestLimit(text: String) =
+    text.replace(',', '.').toDoubleOrNull()?.takeIf { it in WaferTestPlan.simulationLimits }
+
+@Composable
+private fun TestLimitField(label: String, value: String, onChange: (String) -> Unit, valid: Boolean) {
+    OutlinedTextField(value, { onChange(it.take(8)) }, label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        isError = !valid, singleLine = true, modifier = Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun ThresholdComparison(comparison: WaferTestComparison) {
+    var showChanges by remember(comparison) { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val direction = if (comparison.becamePass) "不合格 → 合格" else "合格 → 不合格"
+    Text("阈值对比", style = MaterialTheme.typography.titleMedium)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ThresholdMetric("基准上限", comparison.baselineLimit, comparison.baselineYield,
+            comparison.baselinePassed, comparison.total, Modifier.weight(1f))
+        ThresholdMetric("对比上限", comparison.comparisonLimit, comparison.comparisonYield,
+            comparison.comparisonPassed, comparison.total, Modifier.weight(1f))
+    }
+    val delta = String.format(Locale.ROOT, "%+.2f", comparison.yieldDeltaPoints)
+    Text("良率变化 $delta 个百分点", color = colors.primary, style = MaterialTheme.typography.titleSmall)
+    if (comparison.changedDies.isEmpty()) {
+        Text("两种上限下，所有芯片的判定相同。", style = MaterialTheme.typography.bodySmall)
+    } else {
+        Text("判定变化 ${comparison.changedDies.size} 颗 · $direction",
+            style = MaterialTheme.typography.bodySmall)
+        GlassTextButton({ showChanges = true }) { Text("查看变化位置") }
+    }
+    if (showChanges) AlertDialog(
+        onDismissRequest = { showChanges = false },
+        title = { Text("判定变化位置") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(direction, style = MaterialTheme.typography.labelLarge)
+                LazyColumn(Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(comparison.changedDies) { die ->
+                        val reading = String.format(Locale.ROOT, "%.2f µA", die.reading)
+                        Text("第 ${die.row} 行 · 第 ${die.col} 列 · $reading")
+                    }
+                }
+            }
+        },
+        confirmButton = { GlassTextButton({ showChanges = false }) { Text("关闭") } }
+    )
+}
+
+@Composable
+private fun ThresholdMetric(label: String, limit: Double, yield: Double, passed: Int, total: Int, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Text("${testLimitText(limit)} µA", style = MaterialTheme.typography.titleMedium)
+        val rate = String.format(Locale.ROOT, "%.2f%%", yield * 100)
+        Text("$rate · 合格 $passed/$total", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 @Composable
 private fun WaferTestHistoryDialog(history: WaferTestHistoryUiState, onDismiss: () -> Unit, onSelect: (Long) -> Unit) {
     val entries = history.entries
@@ -208,7 +277,8 @@ private fun WaferTestHistoryDialog(history: WaferTestHistoryUiState, onDismiss: 
                 else -> LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(entries, key = { it.id }) { entry ->
                         val yield = String.format(Locale.ROOT, "%.2f%%", entry.yieldRate * 100)
-                        StudioAction(entry.waferName, "${entry.mode} · 良率 $yield · ${testDate.format(entry.completedAt)}",
+                        val source = if (entry.mode == WaferTestPlan.SIMULATION) "仿真数据" else entry.mode
+                        StudioAction(entry.waferName, "$source · 良率 $yield · ${testDate.format(entry.completedAt)}",
                             StudioIcon.DATA, { onSelect(entry.id) })
                     }
                 }

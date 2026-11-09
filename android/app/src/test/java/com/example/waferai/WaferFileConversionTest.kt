@@ -4,6 +4,7 @@ import com.example.waferai.data.local.WaferCoordinateCsv
 import com.example.waferai.data.local.WaferFileWriter
 import com.example.waferai.data.local.WaferJson
 import com.example.waferai.data.local.WaferTestData
+import com.example.waferai.data.local.WaferSource
 import com.example.waferai.data.local.parsedWafer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -25,6 +26,8 @@ class WaferFileConversionTest {
             WaferTestData.stdf(stdf, "map.stdf"), WaferTestData.atdf(atdf.toByteArray(), "map.atdf"),
             WaferCoordinateCsv.parse(csv.reader(), "map.csv"), WaferJson.parse(WaferFileWriter.json(wafer).toByteArray(), "map.json")
         )
+        assertEquals(listOf(WaferSource.MAP_EXPORT, WaferSource.MAP_EXPORT, WaferSource.GRID_FILE, WaferSource.GRID_FILE),
+            results.map { it.detail.sourceKind })
         results.forEach { parsed ->
             assertEquals(source.inputHash, parsed.inputHash)
             assertEquals(wafer.lotCode, parsed.detail.lotCode)

@@ -91,10 +91,11 @@ internal fun YieldRing(rate: Double, modifier: Modifier = Modifier, diameter: Dp
 
 @Composable
 internal fun WaferRecordCard(record: WaferRecord, onClick: () -> Unit, modifier: Modifier = Modifier,
-                             threshold: Int = 90, selected: Boolean = false) {
+                             threshold: Int = 90, selected: Boolean = false, enabled: Boolean = true,
+                             selectedLabel: String = "已选为晶圆 A") {
     val scheme = MaterialTheme.colorScheme
     val color = if (100.0 * record.yieldRate < threshold) scheme.error else scheme.primary
-    Surface(onClick, modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+    Surface(onClick, modifier.fillMaxWidth(), enabled = enabled, shape = RoundedCornerShape(20.dp),
         color = if (selected) scheme.primaryContainer else scheme.surfaceContainer,
         border = BorderStroke(1.dp, if (selected) scheme.primary else scheme.outlineVariant.copy(alpha = 0.5f))) {
         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -106,10 +107,11 @@ internal fun WaferRecordCard(record: WaferRecord, onClick: () -> Unit, modifier:
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(record.filename, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(record.sourceKind.label, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
                 Text(String.format(Locale.CHINA, "良率 %.2f%% · 有效芯片 %d", record.yieldRate * 100, record.totalCount),
                     style = MaterialTheme.typography.bodySmall, color = color)
                 Text(importedTime(record.createdAt), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
-                if (selected) Text("已选为晶圆 A", style = MaterialTheme.typography.labelMedium, color = scheme.primary)
+                if (selected) Text(selectedLabel, style = MaterialTheme.typography.labelMedium, color = scheme.primary)
             }
             StudioGlyph(StudioIcon.ARROW, Modifier.size(14.dp), scheme.onSurfaceVariant)
         }

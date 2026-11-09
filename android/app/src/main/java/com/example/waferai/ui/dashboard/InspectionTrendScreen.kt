@@ -55,13 +55,13 @@ internal fun InspectionTrendScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             BackButton(onBack)
-            StudioHeader("检测趋势", "WAFERAI / INSPECTIONS", StudioIcon.DATA)
+            StudioHeader("近期检测记录", "WAFERAI / INSPECTIONS", StudioIcon.DATA)
             Text("最多展示最近 30 张晶圆，每张取最近一次检测。", style = MaterialTheme.typography.bodySmall)
         }
         if (result == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if (result?.isFailure == true) item { Text("无法读取检测趋势。", color = scheme.error) }
+        if (result?.isFailure == true) item { Text("无法读取近期检测记录。", color = scheme.error) }
         if (result?.isSuccess == true && records.isEmpty()) item {
-            Text("完成首次晶圆检测后，这里会显示良率趋势。")
+            Text("完成首次晶圆检测后，这里会显示检测记录。")
         }
         if (records.isNotEmpty()) {
             item { YieldTrendCard(records.asReversed()) }
@@ -94,7 +94,7 @@ private fun YieldTrendCard(points: List<InspectionPoint>) {
     val totalGood = points.sumOf { it.good.toLong() }
     val totalBad = points.sumOf { it.bad.toLong() }
     StudioPanel(Modifier.fillMaxWidth()) {
-        Text("历史良率趋势", style = MaterialTheme.typography.titleMedium)
+        Text("良率 · 本机检测顺序", style = MaterialTheme.typography.titleMedium)
         Text("加权良率 ${percent(totalGood.toDouble() / (totalGood + totalBad))} · ${points.count { it.belowThreshold }} 张待排查")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.height(144.dp), verticalArrangement = Arrangement.SpaceBetween) {

@@ -73,7 +73,7 @@ internal fun WaferConversionDialog(viewModel: ImportViewModel) {
                     }
                 }
                 if (format == WaferFileFormat.STDF || format == WaferFileFormat.ATDF) {
-                    Text("从晶圆网格生成坐标、合格状态和计数。原始电测项目、量测值和设备记录无法还原。",
+                    Text("晶圆图导出。文件仅包含晶圆坐标、合格状态和计数。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())

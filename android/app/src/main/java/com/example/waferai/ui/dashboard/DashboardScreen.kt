@@ -73,7 +73,7 @@ fun StatisticsScreen(
         SectionHeading("分析工作区")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ActionTile("批次汇总", "跨晶圆查看批次表现", StudioIcon.WAFER, onLots, Modifier.weight(1f))
-            ActionTile("检测趋势", "良率曲线与类别分布", StudioIcon.DATA, onTrend, Modifier.weight(1f))
+            ActionTile("近期检测记录", "按本机检测顺序查看", StudioIcon.DATA, onTrend, Modifier.weight(1f))
         }
         StudioAction("低良率排查", "按阈值筛查并打开可疑晶圆。", StudioIcon.THINK, onReviewYield)
         data?.let { summary ->

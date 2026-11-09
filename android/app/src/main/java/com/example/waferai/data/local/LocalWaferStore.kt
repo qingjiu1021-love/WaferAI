@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.example.waferai.data.remote.*
+import com.example.waferai.data.analysis.LotFailureStack
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,7 +44,7 @@ data class WaferOverview(
     val yieldRate: Double? get() = if (total == 0L) null else good.toDouble() / total
 }
 
-class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQLiteOpenHelper(context, name, null, 2) {
+class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQLiteOpenHelper(context, name, null, 3) {
     private val gson = Gson()
     private val revision = MutableStateFlow(0L)
     internal val waferRevision = revision.asStateFlow()
@@ -54,6 +55,7 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE lots(id INTEGER PRIMARY KEY, lot_code TEXT NOT NULL UNIQUE)")
         db.execSQL("CREATE TABLE wafers(id INTEGER PRIMARY KEY, lot_id INTEGER NOT NULL REFERENCES lots(id), wafer_code TEXT NOT NULL, filename TEXT NOT NULL, rows INTEGER NOT NULL, cols INTEGER NOT NULL, good_count INTEGER NOT NULL CHECK(good_count>=0), bad_count INTEGER NOT NULL CHECK(bad_count>=0), map_json TEXT NOT NULL, input_hash TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(lot_id,wafer_code))")
+        addWaferSource(db)
         db.execSQL("CREATE INDEX ix_wafers_lot ON wafers(lot_id,id)")
         db.execSQL("CREATE TABLE predictions(id INTEGER PRIMARY KEY, wafer_id INTEGER NOT NULL REFERENCES wafers(id), model_hash TEXT NOT NULL, result_json TEXT NOT NULL, UNIQUE(wafer_id,model_hash))")
         db.execSQL("CREATE TABLE analyses(id INTEGER PRIMARY KEY, wafer_id INTEGER NOT NULL REFERENCES wafers(id), prediction_id INTEGER NOT NULL REFERENCES predictions(id), model TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)")
@@ -61,9 +63,12 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
         createInspections(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion == 1 && newVersion == 2)
-        createInspections(db)
+        check(oldVersion in 1..2 && newVersion == 3)
+        if (oldVersion == 1) createInspections(db)
+        addWaferSource(db)
     }
+    private fun addWaferSource(db: SQLiteDatabase) =
+        db.execSQL("ALTER TABLE wafers ADD COLUMN source_code TEXT NOT NULL DEFAULT 'UNKNOWN'")
     private fun createInspections(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE inspections(id INTEGER PRIMARY KEY REFERENCES wafers(id), " +
@@ -80,30 +85,38 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
     @Synchronized internal fun saveParsed(parsed: ParsedWafer): ImportResponse {
         val wafer = parsed.detail
         val db = writableDatabase
-        var inserted = false
+        var changed = false
         db.beginTransaction()
         try {
             db.execSQL("INSERT OR IGNORE INTO lots(lot_code) VALUES(?)", arrayOf(wafer.lotCode))
             val lotId = db.rawQuery("SELECT id FROM lots WHERE lot_code=?", arrayOf(wafer.lotCode)).use { it.moveToFirst(); it.getInt(0) }
-            val existing = db.rawQuery("SELECT id,input_hash FROM wafers WHERE lot_id=? AND wafer_code=?", arrayOf(lotId.toString(), wafer.waferCode)).use {
-                if (it.moveToFirst()) it.getInt(0) to it.getString(1) else null
+            val existing = db.rawQuery("SELECT id,input_hash,source_code FROM wafers WHERE lot_id=? AND wafer_code=?", arrayOf(lotId.toString(), wafer.waferCode)).use {
+                if (it.moveToFirst()) Triple(it.getInt(0), it.getString(1), WaferSource.fromCode(it.getString(2))) else null
             }
             if (existing != null) {
                 require(existing.second == parsed.inputHash) { "同一批次和晶圆编号已存在不同矩阵，请使用新的晶圆编号。" }
+                if (existing.third == WaferSource.UNKNOWN && wafer.sourceKind != WaferSource.UNKNOWN) {
+                    db.update("wafers", ContentValues().apply {
+                        put("source_code", wafer.sourceKind.name)
+                        put("filename", wafer.filename)
+                    }, "id=?", arrayOf(existing.first.toString()))
+                    changed = true
+                }
                 val result = ImportResponse(true, detail(existing.first)); db.setTransactionSuccessful(); return result
             }
             val values = ContentValues().apply {
                 put("lot_id", lotId); put("wafer_code", wafer.waferCode); put("filename", wafer.filename)
                 put("rows", wafer.rows); put("cols", wafer.cols); put("good_count", wafer.goodCount); put("bad_count", wafer.badCount)
                 put("map_json", gson.toJson(wafer.map)); put("input_hash", parsed.inputHash); put("created_at", Instant.now().toString())
+                put("source_code", wafer.sourceKind.name)
             }
             val id = db.insertOrThrow("wafers", null, values).toInt()
             db.setTransactionSuccessful()
-            inserted = true
-            return ImportResponse(false, wafer.copy(id = id))
+            changed = true
+            return ImportResponse(false, wafer.copy(id = id, source = wafer.sourceKind))
         } finally {
             db.endTransaction()
-            if (inserted) revision.value++
+            if (changed) revision.value++
         }
     }
     @Synchronized fun detail(id: Int): WaferDetail = readableDatabase.rawQuery(
@@ -113,7 +126,8 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
         val good = c.int("good_count"); val bad = c.int("bad_count")
         @Suppress("UNCHECKED_CAST")
         val map = gson.fromJson(c.text("map_json"), Array<IntArray>::class.java).map { it.toList() }
-        WaferDetail(c.int("id"), c.text("lot_code"), c.text("wafer_code"), c.text("filename"), c.int("rows"), c.int("cols"), good,bad,good+bad,good.toDouble()/(good+bad),map)
+        WaferDetail(c.int("id"), c.text("lot_code"), c.text("wafer_code"), c.text("filename"), c.int("rows"), c.int("cols"),
+            good, bad, good + bad, good.toDouble() / (good + bad), map, WaferSource.fromCode(c.text("source_code")))
     }
     @Synchronized fun overview(): WaferOverview = readableDatabase.rawQuery(
         """
@@ -134,11 +148,18 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
         order: WaferOrder = WaferOrder.RECENT, belowPercent: Int? = null,
         yieldBand: WaferYieldBand? = null
     ): List<WaferRecord> = queryWafers(lotId, query, order, belowPercent, yieldBand, limit, offset).use { c ->
-        buildList { while(c.moveToNext()) { val total = c.int("good_count") + c.int("bad_count"); add(WaferRecord(c.int("id"),c.text("lot_code"),c.text("wafer_code"),c.text("filename"),total,c.int("good_count").toDouble()/total,c.text("created_at"))) } }
+        buildList {
+            while (c.moveToNext()) {
+                val good = c.int("good_count")
+                val total = good + c.int("bad_count")
+                add(WaferRecord(c.int("id"), c.text("lot_code"), c.text("wafer_code"), c.text("filename"),
+                    total, good.toDouble() / total, c.text("created_at"), WaferSource.fromCode(c.text("source_code"))))
+            }
+        }
     }
 
     @Synchronized fun writeWafersCsv(writer: Writer, query: WaferCsvQuery, checkCancelled: () -> Unit): Int {
-        writer.write("\uFEFF批次,晶圆,来源文件,合格芯片,不合格芯片,有效芯片,良率(%),导入时间(UTC)\r\n")
+        writer.write("\uFEFF批次,晶圆,来源文件,合格芯片,不合格芯片,有效芯片,良率(%),导入时间(UTC),数据来源\r\n")
         var count = 0
         queryWafers(query.lotId, query.text, query.order, query.belowPercent, query.yieldBand).use { cursor ->
             while (cursor.moveToNext()) {
@@ -149,7 +170,8 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
                 val rate = String.format(Locale.ROOT, "%.2f", 100.0 * good / total)
                 writer.write(listOf(
                     csvText(cursor.text("lot_code")), csvText(cursor.text("wafer_code")), csvText(cursor.text("filename")),
-                    good.toString(), bad.toString(), total.toString(), rate, csvText(cursor.text("created_at"))
+                    good.toString(), bad.toString(), total.toString(), rate, csvText(cursor.text("created_at")),
+                    csvText(WaferSource.fromCode(cursor.text("source_code")).label)
                 ).joinToString(","))
                 writer.write("\r\n")
                 count++
@@ -197,7 +219,7 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
             args += listOf(limit.toString(), offset.toString())
             " LIMIT ? OFFSET ?"
         }
-        return readableDatabase.rawQuery("SELECT w.id,l.lot_code,w.wafer_code,w.filename,w.good_count,w.bad_count,w.created_at FROM wafers w JOIN lots l ON l.id=w.lot_id $where ORDER BY $sort$paging", args.toTypedArray())
+        return readableDatabase.rawQuery("SELECT w.id,l.lot_code,w.wafer_code,w.filename,w.good_count,w.bad_count,w.created_at,w.source_code FROM wafers w JOIN lots l ON l.id=w.lot_id $where ORDER BY $sort$paging", args.toTypedArray())
     }
     private fun lots(where: String, args: Array<String>): List<LotSummary> = readableDatabase.rawQuery(
         "SELECT l.id,l.lot_code,COUNT(w.id) AS count,COALESCE(SUM(w.good_count),0) AS good,COALESCE(SUM(w.bad_count),0) AS bad,MAX(w.created_at) AS latest FROM lots l LEFT JOIN wafers w ON w.lot_id=l.id $where GROUP BY l.id,l.lot_code ORDER BY MAX(w.id) DESC,l.id DESC",args).use { c ->
@@ -205,6 +227,14 @@ class LocalWaferStore(context: Context, name: String = "waferai-local.db") : SQL
     }
     @Synchronized fun listLots(limit: Int, offset: Int) = lots("", emptyArray()).drop(offset).take(limit)
     @Synchronized fun lotDetail(id: Int) = lots("WHERE l.id=?", arrayOf(id.toString())).firstOrNull() ?: error("没有找到这个本地批次。")
+    @Synchronized internal fun lotFailureStack(lotId: Int, waferIds: IntArray, checkActive: () -> Unit): LotFailureStack {
+        require(waferIds.size in 2..LotFailureStack.MAX_WAFERS) { "请选择 2～${LotFailureStack.MAX_WAFERS} 片晶圆。" }
+        val lot = lotDetail(lotId)
+        return LotFailureStack.calculate(lot.lotCode, waferIds.asSequence().map {
+            checkActive()
+            detail(it)
+        }, checkActive)
+    }
     @Synchronized fun prediction(waferId: Int, modelHash: String? = null): WaferPrediction? {
         val clause = if(modelHash == null) "" else "AND model_hash=?"
         val args = if(modelHash == null) arrayOf(waferId.toString()) else arrayOf(waferId.toString(),modelHash)

@@ -1,5 +1,7 @@
 package com.example.waferai.data.remote
 
+import com.example.waferai.data.local.WaferSource
+
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.GET
 import retrofit2.http.Multipart
@@ -61,8 +63,11 @@ data class WaferRecord(
     val filename: String,
     @SerializedName("total_count") val totalCount: Int,
     @SerializedName("yield_rate") val yieldRate: Double,
-    @SerializedName("created_at") val createdAt: String
-)
+    @SerializedName("created_at") val createdAt: String,
+    val source: WaferSource? = null
+) {
+    val sourceKind get() = source ?: WaferSource.UNKNOWN
+}
 
 data class WaferDetail(
     val id: Int,
@@ -75,8 +80,11 @@ data class WaferDetail(
     @SerializedName("bad_count") val badCount: Int,
     @SerializedName("total_count") val totalCount: Int,
     @SerializedName("yield_rate") val yieldRate: Double,
-    val map: List<List<Int>>
-)
+    val map: List<List<Int>>,
+    val source: WaferSource? = null
+) {
+    val sourceKind get() = source ?: WaferSource.UNKNOWN
+}
 
 data class ImportResponse(
     @SerializedName("already_imported") val alreadyImported: Boolean,

@@ -13,6 +13,7 @@ import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.repository.ImportRepository
 import com.example.waferai.data.local.AiAnalysis
 import com.example.waferai.data.local.InspectionRecord
+import com.example.waferai.data.local.ParsedWafer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancelChildren
@@ -38,7 +39,8 @@ data class ImportUiState(
     val exportError: String? = null,
     val analyzing: Boolean = false,
     val analysis: AiAnalysis? = null,
-    val analysisError: String? = null
+    val analysisError: String? = null,
+    val filePreview: WaferDetail? = null
 )
 
 data class GuideUiState(val saving: Boolean = false, val message: String? = null, val error: String? = null)
@@ -52,6 +54,7 @@ internal data class ConversionUiState(
 
 class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     init { viewModelScope.launch { repository.restoreTraining() } }
+    private var preparedFile: ParsedWafer? = null
     private val mutableConversion = MutableStateFlow<ConversionUiState?>(null)
     internal val conversion = mutableConversion.asStateFlow()
 
@@ -155,6 +158,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
 
     fun clearForServerChange() {
         viewModelScope.coroutineContext.cancelChildren()
+        preparedFile = null
         pendingReport = null
         mutableState.value = ImportUiState()
     }
@@ -163,6 +167,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         val current = mutableState.value
         if (current.loading || current.predicting || current.exporting || current.analyzing) return false
         pendingReport = null
+        preparedFile = null
         mutableState.value = ImportUiState()
         return true
     }
@@ -171,6 +176,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         val current = mutableState.value
         if (current.loading || current.predicting || current.exporting || current.analyzing) return false
         pendingReport = null
+        preparedFile = null
         mutableState.value = ImportUiState(loading = true)
         viewModelScope.launch {
             try {
@@ -192,7 +198,35 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         return true
     }
 
-    fun importFile(uri: Uri) = importFrom { repository.importFile(uri) }
+    fun previewFile(uri: Uri) {
+        val current = mutableState.value
+        if (current.loading || current.predicting || current.exporting || current.analyzing || current.filePreview != null) return
+        mutableState.value = current.copy(loading = true, error = null)
+        viewModelScope.launch {
+            try {
+                val parsed = repository.prepareFileImport(uri)
+                preparedFile = parsed
+                mutableState.value = mutableState.value.copy(loading = false, filePreview = parsed.detail)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val message = if (error is IllegalArgumentException) error.message else null
+                mutableState.value = mutableState.value.copy(loading = false,
+                    error = message ?: "无法读取晶圆文件，请检查文件内容和访问权限。")
+            }
+        }
+    }
+
+    fun dismissFilePreview() {
+        preparedFile = null
+        mutableState.value = mutableState.value.copy(filePreview = null)
+    }
+
+    fun confirmFileImport() {
+        val parsed = preparedFile ?: return
+        dismissFilePreview()
+        importFrom { repository.saveFileImport(parsed) }
+    }
 
     fun importImage(uri: Uri, options: WaferImageOptions, threshold: Int) =
         importFrom(inspectAt = threshold) { repository.importImage(uri, options) }

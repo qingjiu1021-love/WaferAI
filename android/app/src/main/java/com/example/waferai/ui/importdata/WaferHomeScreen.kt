@@ -50,6 +50,7 @@ import com.example.waferai.data.ai.AiProfilesState
 import com.example.waferai.data.analysis.WaferMapFilter
 import com.example.waferai.data.local.DemoWafer
 import com.example.waferai.data.local.WaferOverview
+import com.example.waferai.data.local.WaferSource
 import com.example.waferai.ui.theme.SectionHeading
 import com.example.waferai.ui.theme.WorkspaceMetric
 import com.example.waferai.ui.theme.WaferRecordCard
@@ -149,7 +150,7 @@ fun WaferHomeScreen(
         })
         if (wafer == null) {
             WorkspaceIntro(onSelectFile, onSelectImage, { showDemoPicker = true }, { showGuide = true }, enabled = !busy)
-            StudioAction("晶圆测试", "模拟电测 · 历史结果回放", StudioIcon.DATA, onOpenTest)
+            StudioAction("测试仿真与结果回放", "教学仿真 · 历史结果回放", StudioIcon.DATA, onOpenTest)
             StudioPanel(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     WorkspaceMetric("已存晶圆", overview?.wafers?.toString() ?: "—", Modifier.weight(1f))
@@ -177,12 +178,14 @@ fun WaferHomeScreen(
                         Text(wafer.lotCode, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(wafer.filename, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(wafer.sourceKind.label, style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary)
                         Text("合格 ${wafer.goodCount} · 不合格 ${wafer.badCount} · 总数 ${wafer.totalCount}",
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
-            TextButton(onOpenTest) { Text("晶圆测试") }
+            TextButton(onOpenTest) { Text("测试仿真与结果回放") }
             GlassSegmentedTabs(waferPanelLabels, panel.ordinal, { panel = WaferPanel.entries[it] })
             val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
             AnimatedContent(
@@ -215,7 +218,9 @@ fun WaferHomeScreen(
                             TextButton({ showDemoPicker = true }, enabled = !busy) { Text("演示样本") }
                         }
                         TextButton({ showGuide = true }, enabled = !busy) { Text(WaferSourceGuideTitle) }
-                        if (wafer.lotCode == "IMAGE") Text("良率由图片网格推算，请对照原图核对行列和颜色。", style = MaterialTheme.typography.bodySmall)
+                        if (wafer.sourceKind == WaferSource.IMAGE || wafer.sourceKind == WaferSource.UNKNOWN) {
+                            Text(wafer.sourceKind.description, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     if (displayedPanel == WaferPanel.DETECT) {
                         StatusPill(if (importState.prediction == null) "等待检测" else "检测结果已保存")

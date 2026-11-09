@@ -134,7 +134,8 @@ internal object WaferTestData {
                 val map = List(rows) { row -> List(cols) { col -> dies[col + 1 to rows - row] ?: 0 } }
                 return parsedWafer(
                     validateWaferCode(TestGridNotes.original(notes, "lot", lot), "lot_code"),
-                    validateWaferCode(TestGridNotes.original(notes, "wafer", code), "wafer_code"), map, filename
+                    validateWaferCode(TestGridNotes.original(notes, "wafer", code), "wafer_code"),
+                    map, filename, WaferSource.MAP_EXPORT
                 )
             }
             val minX = dies.keys.minOf { it.first }
@@ -147,7 +148,7 @@ internal object WaferTestData {
             }
             val lotId = validateWaferCode(lot.ifBlank { "ATE" }, "lot_code")
             val waferId = validateWaferCode(code.ifBlank { "ATE-${WaferJson.sha256(source).take(16)}" }, "wafer_code")
-            return parsedWafer(lotId, waferId, map, filename)
+            return parsedWafer(lotId, waferId, map, filename, WaferSource.TEST_FILE)
         }
     }
 }

@@ -58,8 +58,8 @@ internal class WaferTestViewModel(
     private var runJob: Job? = null
     private var pendingReport: ReportSnapshot? = null
 
-    fun simulate(limit: Double) = start {
-        withContext(Dispatchers.Default) { WaferTestPlan.simulated(limit) }
+    fun simulate(limit: Double, comparisonLimit: Double) = start {
+        withContext(Dispatchers.Default) { WaferTestPlan.simulated(limit, comparisonLimit) }
     }
 
     fun replay(sample: DemoWafer) = start {
@@ -176,8 +176,9 @@ internal class WaferTestViewModel(
         val current = mutableState.value
         val plan = current.plan ?: return null
         if (current.busy || !current.finished) return null
-        val report = ReportSnapshot(plan.wafer, current.prediction, testSource = "${plan.mode} · ${plan.source}",
-            testCompletedAt = current.completedAt)
+        val sourceLabel = if (plan.mode == WaferTestPlan.SIMULATION) "仿真数据" else plan.mode
+        val report = ReportSnapshot(plan.wafer, current.prediction, testSource = "$sourceLabel · ${plan.source}",
+            testCompletedAt = current.completedAt, testComparison = plan.comparison)
         pendingReport = report
         mutableState.value = current.copy(exporting = true, message = null, error = null)
         return report.suggestedFilename()

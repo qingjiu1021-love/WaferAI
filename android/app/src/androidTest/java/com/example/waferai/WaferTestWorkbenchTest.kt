@@ -2,6 +2,7 @@ package com.example.waferai
 
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -14,6 +15,7 @@ import com.example.waferai.ui.importdata.WaferTestScreen
 import com.example.waferai.ui.importdata.WaferTestViewModel
 import com.example.waferai.ui.theme.WaferAITheme
 import java.io.File
+import java.text.Normalizer
 import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Rule
@@ -47,6 +49,15 @@ class WaferTestWorkbenchTest {
         compose.onNodeWithText("测试流程已完成").assertExists()
         assertEquals(317, model.state.value.completed)
         assertTrue(model.state.value.plan!!.source.contains("0～10 µA"))
+        compose.onNodeWithText("仿真数据").assertExists()
+        val comparison = requireNotNull(model.state.value.plan!!.comparison)
+        assertEquals(15.0, comparison.comparisonLimit, 0.0)
+        assertTrue(comparison.comparisonPassed > comparison.baselinePassed)
+        compose.onNodeWithText("查看变化位置").performScrollTo().performClick()
+        val firstChange = comparison.changedDies.first()
+        compose.onNodeWithText("第 ${firstChange.row} 行 · 第 ${firstChange.col} 列", substring = true).assertExists()
+        compose.onNodeWithText("关闭").performClick()
+        assertReport(model, "仿真数据", "仿真阈值对比", "变化坐标")
         compose.onNodeWithText("查看异常位置").performScrollTo().performClick()
         compose.onNodeWithText("模拟漏电流", substring = true).assertExists()
         compose.onNodeWithText("新建测试").performScrollTo().performClick()
@@ -66,6 +77,7 @@ class WaferTestWorkbenchTest {
             val restored = WaferTestPlan.restore(original.plan)
             assertNotNull(restored.readingAt(10, 10))
             assertNull(restored.readingAt(0, 0))
+            assertEquals(comparison, restored.comparison)
         }
         compose.onNodeWithText("测试历史").performScrollTo().performClick()
         compose.onNodeWithText("WM811K-lot2 / W20").performClick()
@@ -74,7 +86,18 @@ class WaferTestWorkbenchTest {
         compose.onNodeWithText("检测图表").performScrollTo().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("芯片状态占比").fetchSemanticsNodes().isNotEmpty() }
 
-        val file = File.createTempFile("wafer-test-replay-", ".pdf", context.cacheDir)
+        try {
+            assertReport(model, "历史结果回放", "WM-811K")
+            assertEquals(baseline, repository.store.overview())
+        } finally {
+            history.close()
+            File(context.noBackupFilesDir, dbName).delete()
+            repository.store.close()
+        }
+    }
+
+    private fun assertReport(model: WaferTestViewModel, vararg expectedText: String) {
+        val file = File.createTempFile("wafer-test-", ".pdf", context.cacheDir)
         try {
             compose.runOnIdle {
                 assertNotNull(model.prepareReport())
@@ -82,15 +105,21 @@ class WaferTestWorkbenchTest {
             }
             compose.waitUntil(10_000) { !model.state.value.exporting }
             assertEquals("测试 PDF 报告已保存。", model.state.value.message)
-            PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)).use {
-                assertTrue(it.pageCount >= 1)
+            PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)).use { pdf ->
+                assertTrue(pdf.pageCount >= 1)
+                if (Build.VERSION.SDK_INT >= 35) {
+                    val text = buildString {
+                        for (index in 0 until pdf.pageCount) {
+                            pdf.openPage(index).use { page -> page.textContents.forEach { append(it.text) } }
+                        }
+                    }
+                    // Android's PDF renderer can extract some Han characters as compatibility radicals.
+                    val normalized = Normalizer.normalize(text, Normalizer.Form.NFKC).replace(Regex("\\s+"), "")
+                    expectedText.forEach { assertTrue("Missing PDF text: $it", normalized.contains(it)) }
+                }
             }
-            assertEquals(baseline, repository.store.overview())
         } finally {
             file.delete()
-            history.close()
-            File(context.noBackupFilesDir, dbName).delete()
-            repository.store.close()
         }
     }
 }

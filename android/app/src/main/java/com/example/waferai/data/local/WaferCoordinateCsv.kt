@@ -61,7 +61,7 @@ internal object WaferCoordinateCsv {
         val map = List(rows) { row ->
             List(cols) { col -> (cells[row * MatrixLimit + col].toInt() - 1).coerceAtLeast(0) }
         }
-        return parsedWafer(lot, wafer, map, filename)
+        return parsedWafer(lot, wafer, map, filename, WaferSource.GRID_FILE)
     }
 
     private fun boundedLines(reader: Reader) = sequence {

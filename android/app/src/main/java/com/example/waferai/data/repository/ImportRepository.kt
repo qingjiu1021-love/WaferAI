@@ -25,6 +25,7 @@ import com.example.waferai.data.local.WaferJson
 import com.example.waferai.data.local.WaferOrder
 import com.example.waferai.data.local.WaferCsvQuery
 import com.example.waferai.data.local.WaferYieldBand
+import com.example.waferai.data.local.WaferSource
 import com.example.waferai.data.local.WaferTrainer
 import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.report.WaferPdfReport
@@ -110,6 +111,9 @@ class ImportRepository(private val context: Context) {
     suspend fun listLots(limit: Int, offset: Int) = withContext(Dispatchers.IO) { store.listLots(limit, offset) }
 
     suspend fun lotDetail(lotId: Int) = withContext(Dispatchers.IO) { store.lotDetail(lotId) }
+    internal suspend fun lotFailureStack(lotId: Int, waferIds: IntArray) = withContext(Dispatchers.IO) {
+        store.lotFailureStack(lotId, waferIds) { ensureActive() }
+    }
 
     suspend fun latestAnalysis(waferId: Int,predictionId: Int) = withContext(Dispatchers.IO) { store.latestAnalysis(waferId,predictionId) }
     suspend fun analyze(wafer: WaferDetail, prediction: WaferPrediction,
@@ -138,7 +142,9 @@ class ImportRepository(private val context: Context) {
 
     internal suspend fun readDemo(sample: DemoWafer): ParsedWafer = withContext(Dispatchers.IO) {
         val bytes = context.assets.open("samples/${sample.filename}").use { it.readBytes() }
-        WaferJson.parse(bytes, sample.filename)
+        val parsed = WaferJson.parse(bytes, sample.filename)
+        val source = if (sample.isReal) WaferSource.WM811K else WaferSource.DEMO
+        parsed.copy(detail = parsed.detail.copy(source = source))
     }
 
     suspend fun saveGuideFile(uri: Uri, file: com.example.waferai.data.local.GuideFile) = withContext(Dispatchers.IO) {
@@ -153,8 +159,10 @@ class ImportRepository(private val context: Context) {
             ?: throw IOException("无法写入所选位置。")
     }
 
-    suspend fun importFile(uri: Uri): ImportResponse = logged(LogOperation.IMPORT) {
-        store.saveParsed(readWaferFile(uri))
+    internal suspend fun prepareFileImport(uri: Uri): ParsedWafer = withContext(Dispatchers.IO) { readWaferFile(uri) }
+
+    internal suspend fun saveFileImport(parsed: ParsedWafer): ImportResponse = logged(LogOperation.IMPORT) {
+        store.saveParsed(parsed)
     }
 
     internal suspend fun readForConversion(uri: Uri): WaferDetail = withContext(Dispatchers.IO) {
@@ -216,7 +224,8 @@ class ImportRepository(private val context: Context) {
     }
 
     private fun displayName(uri: Uri): String? =
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        if (uri.scheme == "file") uri.lastPathSegment
+        else resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                 ?.use { cursor ->
                     val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null

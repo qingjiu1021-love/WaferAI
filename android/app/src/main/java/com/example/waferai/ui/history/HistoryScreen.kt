@@ -1,5 +1,7 @@
 package com.example.waferai.ui.history
 
+import com.example.waferai.data.analysis.LotFailureStack
+
 import com.example.waferai.ui.theme.GlassFilterChip as FilterChip
 import com.example.waferai.ui.theme.GlassButton as Button
 import com.example.waferai.ui.theme.GlassTextButton as TextButton
@@ -56,12 +58,15 @@ fun HistoryScreen(
     onCompare: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     reviewingYield: Boolean = false,
-    lotCode: String? = null
+    lotCode: String? = null,
+    onStack: ((IntArray) -> Unit)? = null
 ) {
     val listState = rememberSaveable(state.query, state.order, state.onlyBelowTarget, state.threshold,
         lotCode, reviewingYield, state.yieldBand, saver = LazyListState.Saver) { LazyListState() }
     var comparing by rememberSaveable(lotCode, reviewingYield, state.yieldBand) { mutableStateOf(false) }
     var firstId by rememberSaveable(lotCode, reviewingYield, state.yieldBand) { mutableStateOf<Int?>(null) }
+    var stacking by rememberSaveable(lotCode) { mutableStateOf(false) }
+    var stackIds by rememberSaveable(lotCode) { mutableStateOf(intArrayOf()) }
     val chooseRecord: (Int) -> Unit = { id ->
         val first = firstId
         if (!comparing) onOpen(id)
@@ -97,6 +102,13 @@ fun HistoryScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+        if (stacking && onStack != null) {
+            Text("已选 ${stackIds.size} 片。请选择同一来源类型、坐标原点与方向一致的晶圆。",
+                style = MaterialTheme.typography.bodySmall)
+            Button({ onStack(stackIds.copyOf()) }, enabled = stackIds.size >= 2, modifier = Modifier.fillMaxWidth()) {
+                Text("坐标一致，生成叠加图")
+            }
+        }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(Modifier.weight(1f).testTag("history-records"), state = listState,
             contentPadding = PaddingValues(bottom = LocalFloatingNavigationPadding.current), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -106,15 +118,27 @@ fun HistoryScreen(
                     TextButton({
                         comparing = !comparing
                         firstId = null
+                        stacking = false
+                        stackIds = intArrayOf()
                     }, enabled = state.records.isNotEmpty() || comparing) {
                         Text(if (comparing) "取消晶圆对照" else "对照晶圆")
                     }
                     TextButton(onExportCsv, enabled = !csv.busy && !state.loading && state.records.isNotEmpty()) {
                         Text(if (csv.busy) "正在导出…" else "导出筛选结果 CSV")
                     }
+                    if (onStack != null) TextButton({
+                        stacking = !stacking
+                        stackIds = intArrayOf()
+                        comparing = false
+                        firstId = null
+                    }, enabled = state.records.isNotEmpty() || stacking) {
+                        Text(if (stacking) "退出叠加选择" else "同批失效叠加")
+                    }
                 }
                 if (comparing) Text(if (firstId == null) "选择第一片晶圆" else "已选第一片，请选择第二片晶圆。",
                     color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                if (stacking) Text("请选择 2～${LotFailureStack.MAX_WAFERS} 片。旧记录可重新导入同一份数据来补记来源。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 csv.message?.let { Text(it, color = if (csv.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
             }
             if (state.records.isNotEmpty()) item {
@@ -137,8 +161,16 @@ fun HistoryScreen(
             }
             state.lot?.let { lot -> item(key = "lot-summary") { LotSummaryCard(lot) } }
             items(state.records, key = { it.id }) { record ->
-                WaferRecordCard(record, { chooseRecord(record.id) }, threshold = state.threshold,
-                    selected = comparing && firstId == record.id)
+                val stacked = record.id in stackIds
+                WaferRecordCard(record, {
+                    if (!stacking) chooseRecord(record.id)
+                    else if (stacked) stackIds = stackIds.filter { it != record.id }.toIntArray()
+                    else if (record.sourceKind.supportsStack && stackIds.size < LotFailureStack.MAX_WAFERS) {
+                        stackIds = stackIds + record.id
+                    }
+                }, threshold = state.threshold, selected = if (stacking) stacked else comparing && firstId == record.id,
+                    enabled = !stacking || (record.sourceKind.supportsStack && (stacked || stackIds.size < LotFailureStack.MAX_WAFERS)),
+                    selectedLabel = if (stacking) "已选入叠加" else "已选为晶圆 A")
             }
             if (state.records.isNotEmpty()) {
                 item {

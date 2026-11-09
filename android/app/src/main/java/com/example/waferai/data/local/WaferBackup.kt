@@ -12,7 +12,7 @@ import java.io.Writer
 
 internal object WaferBackup {
     private const val Format = "WaferAI-data"
-    private const val Version = 2
+    private const val Version = 3
     private val gson = Gson()
 
     private data class Table(val name: String, val numbers: List<String>, val text: List<String>) {
@@ -22,7 +22,7 @@ internal object WaferBackup {
     private val tables = listOf(
         Table("lots", listOf("id"), listOf("lot_code")),
         Table("wafers", listOf("id", "lot_id", "rows", "cols", "good_count", "bad_count"),
-            listOf("wafer_code", "filename", "map_json", "input_hash", "created_at")),
+            listOf("wafer_code", "filename", "map_json", "input_hash", "created_at", "source_code")),
         Table("predictions", listOf("id", "wafer_id"), listOf("model_hash", "result_json")),
         Table("analyses", listOf("id", "wafer_id", "prediction_id"), listOf("model", "content", "created_at")),
         Table("inspections", listOf("id", "prediction_id", "threshold"), listOf("created_at"))
@@ -81,7 +81,8 @@ internal object WaferBackup {
                         if (column == "id" || column.endsWith("_id")) require(number > 0)
                         values.put(column, number.toInt())
                     }
-                    table.text.forEach { column ->
+                    val textColumns = if (version < 3 && table.name == "wafers") table.text.dropLast(1) else table.text
+                    textColumns.forEach { column ->
                         require(json.peek() == JsonToken.STRING)
                         values.put(column, json.nextString())
                     }
@@ -111,6 +112,7 @@ internal object WaferBackup {
                 val original = values.getAsString("map_json")
                 val filename = values.getAsString("filename")
                 require(filename.length <= 180)
+                values.getAsString("source_code")?.let { require(WaferSource.fromCode(it).name == it) }
                 val parsed = WaferJson.parse(
                     """{"lot_code":"backup","wafer_code":${gson.toJson(code)},"map":$original}""".toByteArray(),
                     filename

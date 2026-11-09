@@ -71,6 +71,7 @@ import com.example.waferai.ui.history.WaferCompareScreen
 import com.example.waferai.ui.importdata.ImportViewModel
 import com.example.waferai.ui.importdata.WaferHomeScreen
 import com.example.waferai.ui.importdata.WaferConversionDialog
+import com.example.waferai.ui.importdata.WaferFilePreview
 import com.example.waferai.ui.theme.DockBackdrop
 import com.example.waferai.ui.theme.GlassTabs
 import com.example.waferai.ui.theme.PrimaryTabHost
@@ -80,6 +81,7 @@ import com.example.waferai.ui.theme.recordDockBackdrop
 import com.example.waferai.ui.theme.rememberDockBackdrop
 import com.example.waferai.ui.theme.sampleDockBackdrop
 import com.example.waferai.ui.lots.LotScreen
+import com.example.waferai.ui.lots.LotFailureStackScreen
 import com.example.waferai.ui.lots.LotViewModel
 import com.example.waferai.ui.settings.AiCenterScreen
 import com.example.waferai.ui.settings.AiCenterViewModel
@@ -110,7 +112,7 @@ import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
 import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.mutableIntStateOf
 
-private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
+private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, LOT_STACK, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
 
 private val tabs = listOf(
     Page.WAFER to "晶圆",
@@ -281,6 +283,7 @@ class MainActivity : ComponentActivity() {
                 var directModelAdd by rememberSaveable { mutableStateOf(false) }
                 var directEditorSeen by rememberSaveable { mutableStateOf(false) }
                 var comparison by rememberSaveable { mutableStateOf(intArrayOf()) }
+                var stackSelection by rememberSaveable { mutableStateOf(intArrayOf()) }
                 var lotId by rememberSaveable { mutableStateOf<Int?>(null) }
                 var lotCode by rememberSaveable { mutableStateOf<String?>(null) }
                 var reviewingYield by rememberSaveable { mutableStateOf(false) }
@@ -293,7 +296,7 @@ class MainActivity : ComponentActivity() {
                 val selectedTab = remember {
                     derivedStateOf {
                         when (val current = page) {
-                            Page.HISTORY, Page.LOTS, Page.COMPARE, Page.TREND -> Page.DATA
+                            Page.HISTORY, Page.LOTS, Page.LOT_STACK, Page.COMPARE, Page.TREND -> Page.DATA
                             Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT,
                             Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
                             Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
@@ -332,7 +335,7 @@ class MainActivity : ComponentActivity() {
                         page == Page.TASKS -> navigation.navigate(taskReturn)
                         page == Page.PLUGINS -> navigation.navigate(pluginReturn)
                         page == Page.MODELS -> navigation.navigate(modelReturn)
-                        page == Page.COMPARE -> navigation.navigate(Page.HISTORY)
+                        page == Page.COMPARE || page == Page.LOT_STACK -> navigation.navigate(Page.HISTORY)
                         page == Page.APPEARANCE -> navigation.navigate(themeReturn)
                         page == Page.LEGAL -> navigation.navigate(legalReturn)
                         page == Page.ACCOUNT -> navigation.navigate(accountReturn)
@@ -405,7 +408,7 @@ class MainActivity : ComponentActivity() {
                         waferReturn = null
                         comparison = intArrayOf()
                         waferScreenRevision++
-                        listOf(Page.WAFER, Page.DATA, Page.HISTORY, Page.LOTS, Page.COMPARE)
+                        listOf(Page.WAFER, Page.DATA, Page.HISTORY, Page.LOTS, Page.COMPARE, Page.LOT_STACK)
                             .forEach { scrollStates.removeState(it.name) }
                     }
                 }
@@ -420,10 +423,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    uri?.let {
-                        waferReturn = null
-                        importViewModel.importFile(it)
-                    }
+                    uri?.let(importViewModel::previewFile)
                 }
                 val guideJsonSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
                     uri?.let { importViewModel.saveGuideFile(it, com.example.waferai.data.local.GuideFile.JSON) }
@@ -480,6 +480,13 @@ class MainActivity : ComponentActivity() {
                 val pageBackground = MaterialTheme.colorScheme.background
                 val focus = LocalFocusManager.current
                 WaferConversionDialog(importViewModel)
+                importState.filePreview?.let {
+                    WaferFilePreview(it, onConfirm = {
+                        waferReturn = null
+                        navigation.navigate(Page.WAFER)
+                        importViewModel.confirmFileImport()
+                    }, onDismiss = importViewModel::dismissFilePreview)
+                }
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     snackbarHost = { SnackbarHost(settingsSnackbar) },
@@ -566,8 +573,17 @@ class MainActivity : ComponentActivity() {
                                             scrollStates.removeState(Page.COMPARE.name)
                                             navigation.navigate(Page.COMPARE)
                                         },
-                                        reviewingYield = reviewingYield, lotCode = lotCode, modifier = modifier
+                                        reviewingYield = reviewingYield, lotCode = lotCode, modifier = modifier,
+                                        onStack = if (lotId != null) { ids ->
+                                            stackSelection = ids
+                                            scrollStates.removeState(Page.LOT_STACK.name)
+                                            navigation.navigate(Page.LOT_STACK)
+                                        } else null
                                     )
+                                    Page.LOT_STACK -> lotId?.let { id ->
+                                        LotFailureStackScreen(repository, id, lotCode.orEmpty(), stackSelection,
+                                            goBack, openWafer, modifier)
+                                    } ?: Unit
                                     Page.LOTS -> LotScreen(
                                         state = lotState, onBack = goBack, onRefresh = lotViewModel::refresh,
                                         onLoadMore = lotViewModel::loadMore,

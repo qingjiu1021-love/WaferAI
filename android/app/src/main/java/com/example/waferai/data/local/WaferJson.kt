@@ -36,7 +36,7 @@ object WaferJson {
                 bin.asInt
             }
         }
-        return parsedWafer(lot, wafer, map, filename)
+        return parsedWafer(lot, wafer, map, filename, WaferSource.GRID_FILE)
     }
     fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 }
@@ -53,13 +53,15 @@ internal fun validateWaferCode(value: String, key: String): String = value.trim(
     }
 }
 
-internal fun parsedWafer(lot: String, wafer: String, map: List<List<Int>>, filename: String): ParsedWafer {
+internal fun parsedWafer(
+    lot: String, wafer: String, map: List<List<Int>>, filename: String, source: WaferSource? = null
+): ParsedWafer {
     val good = map.sumOf { row -> row.count { it == 1 } }
     val bad = map.sumOf { row -> row.count { it == 2 } }
     require(good + bad > 0) { "矩阵中没有有效芯片。" }
     val detail = WaferDetail(
         0, lot, wafer, filename.take(180), map.size, map.first().size,
-        good, bad, good + bad, good.toDouble() / (good + bad), map
+        good, bad, good + bad, good.toDouble() / (good + bad), map, source
     )
     val canonical = ByteBuffer.allocate(8 + detail.rows * detail.cols).putInt(detail.rows).putInt(detail.cols)
     map.forEach { row -> row.forEach { canonical.put(it.toByte()) } }

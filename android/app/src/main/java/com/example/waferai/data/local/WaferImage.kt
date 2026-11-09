@@ -41,7 +41,7 @@ internal object WaferImage {
         } finally {
             bitmap.recycle()
         }
-        val wafer = parsedWafer("IMAGE", "IMG-${WaferJson.sha256(bytes).take(16)}", map, filename)
+        val wafer = parsedWafer("IMAGE", "IMG-${WaferJson.sha256(bytes).take(16)}", map, filename, WaferSource.IMAGE)
         // Include the decoded map in the identifier so a corrected palette or grid is importable.
         return wafer.copy(detail = wafer.detail.copy(waferCode = "${wafer.detail.waferCode}-${wafer.inputHash.take(8)}"))
     }

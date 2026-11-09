@@ -13,6 +13,9 @@ import com.example.waferai.data.remote.WaferDetail
 import com.example.waferai.data.remote.WaferPrediction
 import com.example.waferai.data.local.AiAnalysis
 import com.example.waferai.data.local.InspectionRecord
+import com.example.waferai.data.local.WaferSource
+import com.example.waferai.data.local.WaferTestComparison
+import com.example.waferai.data.local.testLimitText
 import com.example.waferai.data.analysis.WaferClusters
 import com.example.waferai.data.analysis.WaferSpatialStats
 import android.graphics.DashPathEffect
@@ -30,7 +33,8 @@ data class ReportSnapshot(
     val analysis: AiAnalysis? = null,
     val inspection: InspectionRecord? = null,
     val testSource: String? = null,
-    val testCompletedAt: Instant? = null
+    val testCompletedAt: Instant? = null,
+    val testComparison: WaferTestComparison? = null
 ) {
     fun suggestedFilename(): String {
         val safe = "${wafer.lotCode}_${wafer.waferCode}"
@@ -132,6 +136,25 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
 
     private val chartData by lazy { WaferReportData.calculate(snapshot.wafer) }
 
+    private fun thresholdComparison(comparison: WaferTestComparison) {
+        reserve(125f)
+        paragraph("仿真阈值对比", 12f, blue, true)
+        val baseline = String.format(Locale.ROOT, "%.2f%%", comparison.baselineYield * 100)
+        val alternate = String.format(Locale.ROOT, "%.2f%%", comparison.comparisonYield * 100)
+        paragraph("基准上限 ${testLimitText(comparison.baselineLimit)} µA · 合格 ${comparison.baselinePassed}/${comparison.total} · 良率 $baseline")
+        paragraph("对比上限 ${testLimitText(comparison.comparisonLimit)} µA · 合格 ${comparison.comparisonPassed}/${comparison.total} · 良率 $alternate")
+        val delta = String.format(Locale.ROOT, "%+.2f", comparison.yieldDeltaPoints)
+        val changed = comparison.changedDies
+        val direction = if (comparison.becamePass) "不合格 → 合格" else "合格 → 不合格"
+        val changeLabel = if (changed.isEmpty()) "判定无变化" else "判定变化 ${changed.size} 颗（$direction）"
+        paragraph("良率变化 $delta 个百分点 · $changeLabel")
+        if (changed.isNotEmpty()) {
+            val example = changed.take(20).joinToString("  ") { "(${it.row}, ${it.col})" }
+            paragraph("变化坐标（行, 列，最多前 20 颗）：$example", 9f, muted)
+        }
+        paragraph("两种上限使用同一组仿真读数，读数不超过上限即合格。报告晶圆图、图表和 AI 分类对应基准判定。", 9f, muted)
+    }
+
     private fun detectionCharts() {
         newPage()
         paragraph("数据图表", 16f, blue, true)
@@ -207,11 +230,14 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
 
     private fun waferMap() {
         val wafer = snapshot.wafer
-        val scale = min(360f / wafer.cols, 260f / wafer.rows)
+        // Leave room for the anomaly coordinates below the comparison report's map.
+        val maxMapHeight = if (snapshot.testComparison != null) 180f else 260f
+        val scale = min(360f / wafer.cols, maxMapHeight / wafer.rows)
         val mapWidth = wafer.cols * scale
         val mapHeight = wafer.rows * scale
         reserve(mapHeight + 62f)
-        paragraph("原始晶圆图（${wafer.rows} 行 × ${wafer.cols} 列）", 12f, blue, true)
+        val title = if (snapshot.testComparison != null) "基准判定晶圆图" else "原始晶圆图"
+        paragraph("$title（${wafer.rows} 行 × ${wafer.cols} 列）", 12f, blue, true)
         val pixels = IntArray(wafer.rows * wafer.cols) { index ->
             when (wafer.map[index / wafer.cols][index % wafer.cols]) {
                 1 -> good
@@ -284,6 +310,11 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
             paragraph("批次：${snapshot.wafer.lotCode}", bold = true)
             val record = if (snapshot.wafer.id > 0) "    记录编号：${snapshot.wafer.id}" else ""
             paragraph("晶圆编号：${snapshot.wafer.waferCode}$record")
+            val source = snapshot.wafer.sourceKind
+            if (snapshot.testSource == null || source != WaferSource.UNKNOWN && source != WaferSource.SIMULATION) {
+                paragraph("数据来源：${source.label}", 10f, blue, true)
+                if (source != WaferSource.UNKNOWN) paragraph(source.description, 9f, muted)
+            }
             snapshot.testSource?.let { paragraph("测试来源：$it", 10f, blue, true) }
             snapshot.testCompletedAt?.let {
                 val completed = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -293,6 +324,7 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
             paragraph("来源文件：${snapshot.wafer.filename}", 9.5f, muted)
             y += 3f
             statistics()
+            snapshot.testComparison?.let { thresholdComparison(it) }
             snapshot.inspection?.let { inspection ->
                 val wafer = snapshot.wafer
                 val review = if (100L * wafer.goodCount < inspection.threshold.toLong() * wafer.totalCount)

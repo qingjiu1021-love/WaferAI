@@ -1,10 +1,18 @@
-# WaferAI 4.11.2
+# WaferAI 5.1.0
 
-Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 50。
+Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 53。
 
 [下载安装包](https://github.com/qingjiu1021-love/WaferAI/releases/latest) · [账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)
 
 支持 Android 8.0 及以上的 arm64-v8a / x86_64。手机本地晶圆分析无需电脑服务，测试包沿用此前签名，可直接覆盖安装，无需先卸载。
+
+## 5.1.0
+
+数据文件先预览、确认后再保存。来源标记随记录、备份、统计 CSV 和 PDF 保留。批次晶圆页面可选 2～30 片坐标可对齐的晶圆，查看每个位置的失效次数，并打开对应单片。
+
+## 4.11.3 本地更新
+
+晶圆页的「测试仿真与结果回放」分为教学仿真和历史结果回放。仿真用同一组漏电流读数比较两个上限，显示良率差值和判定发生变化的芯片坐标。历史和 PDF 保留仿真来源与对比结果。WM-811K 回放沿用原有合格状态。
 
 ## 4.11.2 本地更新
 

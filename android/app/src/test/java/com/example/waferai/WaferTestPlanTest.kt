@@ -30,11 +30,36 @@ class WaferTestPlanTest {
         assertSame(original, replay.wafer)
         assertEquals(WaferTestPlan.REPLAY, replay.mode)
         assertNull(replay.readingAt(10, 10))
+        assertNull(replay.comparison)
+    }
+
+    @Test fun comparisonCountsOnlyDiesThatCrossTheLimitAndSurvivesRestore() {
+        val center = requireNotNull(WaferTestPlan.simulated(10.0).readingAt(10, 10))
+        val plan = WaferTestPlan.simulated(center - 0.01, center)
+        val comparison = requireNotNull(plan.comparison)
+        val changed = comparison.changedDies.single { it.row == 11 && it.col == 11 }
+        assertEquals(center, changed.reading, 0.0)
+        assertEquals(plan.wafer.goodCount, comparison.baselinePassed)
+        assertEquals(WaferTestPlan.simulated(center).wafer.goodCount, comparison.comparisonPassed)
+        assertEquals(comparison.comparisonPassed - comparison.baselinePassed, comparison.changedDies.size)
+        assertTrue(comparison.becamePass)
+        assertEquals(comparison, WaferTestPlan.restore(plan.snapshot()).comparison)
+
+        val stricter = requireNotNull(WaferTestPlan.simulated(center, center - 0.01).comparison)
+        assertEquals(comparison.changedDies, stricter.changedDies)
+        assertEquals(-comparison.yieldDeltaPoints, stricter.yieldDeltaPoints, 0.0)
+        assertFalse(stricter.becamePass)
+
+        val equal = requireNotNull(WaferTestPlan.simulated(center, center).comparison)
+        assertTrue(equal.changedDies.isEmpty())
+        assertEquals(0.0, equal.yieldDeltaPoints, 0.0)
+        assertNull(WaferTestPlan.restore(WaferTestPlan.simulated(10.0).snapshot()).comparison)
     }
 
     @Test fun simulationRejectsInvalidLimits() {
         for (invalid in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0, 100.01)) {
             assertThrows(IllegalArgumentException::class.java) { WaferTestPlan.simulated(invalid) }
+            assertThrows(IllegalArgumentException::class.java) { WaferTestPlan.simulated(10.0, invalid) }
         }
     }
 }
