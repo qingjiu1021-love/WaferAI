@@ -1,10 +1,14 @@
-# WaferAI 5.1.0
+# WaferAI 5.1.1
 
-Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 53。
+Android 晶圆缺陷识别、良率分析与 AI 助手毕业设计。versionCode 54。
 
 [下载安装包](https://github.com/qingjiu1021-love/WaferAI/releases/latest) · [账号与帮助中心](https://waferai-help.sparsefirefly.chatgpt.site/account)
 
 支持 Android 8.0 及以上的 arm64-v8a / x86_64。手机本地晶圆分析无需电脑服务，测试包沿用此前签名，可直接覆盖安装，无需先卸载。
+
+## 5.1.1
+
+桌面图标和「关于」页徽章更新为霓虹星轨晶格图案。支持圆形、圆角和系统主题色图标。
 
 ## 5.1.0
 

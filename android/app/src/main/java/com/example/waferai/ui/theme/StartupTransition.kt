@@ -114,7 +114,7 @@ internal fun StartupTransition(
                     scaleX = 0.96f + 0.04f * reveal.value
                     scaleY = scaleX
                 }) {
-                    Image(painterResource(R.drawable.wafer_launcher_art), null, Modifier.fillMaxSize())
+                    Image(painterResource(R.drawable.wafer_open_scan_art), null, Modifier.fillMaxSize())
                     AndroidView(
                         factory = { context ->
                             ImageView(context).apply {
