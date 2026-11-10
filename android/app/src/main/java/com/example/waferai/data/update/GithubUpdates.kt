@@ -1,4 +1,4 @@
-package com.example.waferai.data.account
+package com.example.waferai.data.update
 
 import com.example.waferai.BuildConfig
 import com.google.gson.JsonParser

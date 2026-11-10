@@ -124,6 +124,10 @@ internal class ChatViewModel(
         if (!mutable.value.busy) mutable.value = mutable.value.copy(error = "无法打开系统相机。")
     }
 
+    fun photoPickerUnavailable() {
+        if (!mutable.value.busy) mutable.value = mutable.value.copy(error = "无法打开系统相册。")
+    }
+
     fun attachText(text: String) {
         if (mutable.value.busy || text.isBlank()) return
         mutable.value = mutable.value.copy(attachment = ChatAttachment("文本", text.trim().take(8000)), error = null)
@@ -187,13 +191,13 @@ internal class ChatViewModel(
                             append(it.take(900))
                         }
                     }.trim()
-                    var reply = if (references.isEmpty()) guidance else guidance +
+                    val reply = if (references.isEmpty()) guidance else guidance +
                         (if (english) "\n\nFrom the offline knowledge base\n" else "\n\n本地知识库\n") +
                         references.joinToString("\n\n") { "${it.title(english)}\n${it.body(english)}\n${it.source}" }
-                    if (previous.webSearch) reply = (if (search.sources.isEmpty()) search.notice.orEmpty() else
-                        "已检索到以下网页摘要。基础助手展示检索资料；需要综合分析时可选择在线模型。\n\n" +
-                        search.sources.mapIndexed { index, source -> "[${index + 1}] ${source.title}\n${source.snippet}" }.joinToString("\n\n"))
-                    reply to LocalWaferAssistant.Name
+                    val sourceNote = if (search.sources.isEmpty()) "" else if (english) {
+                        "\n\nRelated web summaries are available next to the model name."
+                    } else "\n\n已找到相关网页，点击模型名称旁的箭头查看摘要。"
+                    (reply + sourceNote) to LocalWaferAssistant.Name
                 } else {
                     val profile = withContext(Dispatchers.IO) { profiles.request(profileId) }
                     contextId = "$profileId:${profile.profile.endpoint}"

@@ -4,6 +4,8 @@ import com.example.waferai.ui.theme.GlassTextButton as TextButton
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,10 +13,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalUriHandler
-import com.example.waferai.data.account.GithubUpdates
+import androidx.compose.ui.platform.LocalContext
+import com.example.waferai.data.update.GithubUpdates
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.waferai.BuildConfig
@@ -23,7 +30,7 @@ import com.example.waferai.ui.theme.*
 import com.example.waferai.ui.theme.UiText as Text
 
 @Composable
-internal fun AboutScreen(onBack: () -> Unit, onHelp: () -> Unit, onLegal: (String) -> Unit, updates: UpdateViewModel, modifier: Modifier = Modifier) {
+internal fun AboutScreen(onBack: () -> Unit, onDocument: (String) -> Unit, updates: UpdateViewModel, modifier: Modifier = Modifier) {
     val update by updates.state.collectAsStateWithLifecycle()
     val uri = LocalUriHandler.current
     var download by remember { mutableStateOf(false) }
@@ -35,7 +42,8 @@ internal fun AboutScreen(onBack: () -> Unit, onHelp: () -> Unit, onLegal: (Strin
         StudioHeader("关于", "WAFERAI / ABOUT", StudioIcon.PERSON)
         StudioPanel(Modifier.fillMaxWidth(), MaterialTheme.colorScheme.primaryContainer) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Image(painterResource(R.drawable.wafer_launcher_art), null, Modifier.size(76.dp))
+                Image(painterResource(R.drawable.wafer_starry_badge), "WaferAI",
+                    Modifier.size(76.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF142852)).padding(8.dp))
                 Column {
                     Text("WaferAI", style = MaterialTheme.typography.headlineSmall)
                     Text("版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
@@ -56,11 +64,9 @@ internal fun AboutScreen(onBack: () -> Unit, onHelp: () -> Unit, onLegal: (Strin
             }
         }
         StudioAction("GitHub 项目", "源码、安装包与更新说明", StudioIcon.FILE, { open(GithubUpdates.repository) })
-        StudioAction("帮助中心", "登录后打开常见问题网页", StudioIcon.BOOK, onHelp)
-        StudioAction("使用条款", "服务规则、账号与第三方服务", StudioIcon.FILE, { onLegal("terms") })
-        StudioAction("隐私政策", "了解数据使用、保存与删除方式", StudioIcon.MEMORY, { onLegal("privacy") })
-        Text("毕业设计测试版 · 账号服务和第三方登录需由维护者开通。", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        StudioAction("帮助中心", "在本机查看常见问题与操作指南", StudioIcon.BOOK, { onDocument("help") })
+        StudioAction("使用条款", "使用规则与第三方服务", StudioIcon.FILE, { onDocument("terms") })
+        StudioAction("隐私政策", "了解数据使用、保存与删除方式", StudioIcon.MEMORY, { onDocument("privacy") })
     }
     if (download) update.release?.let { release ->
         AlertDialog(onDismissRequest = { download = false }, title = { Text("下载 ${release.version}？") },
@@ -72,22 +78,48 @@ internal fun AboutScreen(onBack: () -> Unit, onHelp: () -> Unit, onLegal: (Strin
 
 @Composable
 internal fun LegalScreen(document: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val page = if (document == "privacy") "privacy" else "terms"
+    val documents = remember { setOf("help", "privacy", "terms") }
+    var page by remember(document) { mutableStateOf(document.takeIf(documents::contains) ?: "terms") }
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    val stylesheet = remember(context) { context.assets.open("legal/style.css").bufferedReader().use { it.readText() } }
+    val html = remember(context, page, scheme) {
+        val asset = context.assets.open("legal/$page.html").bufferedReader().use { it.readText() }
+        val dark = scheme.background.luminance() < 0.5f
+        val panel = scheme.surfaceContainer
+        val colors = """<style>:root {
+            color-scheme: ${if (dark) "dark" else "light"};
+            --ink: ${scheme.onBackground.cssHex()}; --muted: ${scheme.onSurfaceVariant.cssHex()};
+            --accent: ${scheme.primary.cssHex()}; --line: ${scheme.outlineVariant.cssHex()};
+            --panel: rgba(${(panel.red * 255).toInt()},${(panel.green * 255).toInt()},${(panel.blue * 255).toInt()},0.84);
+        }</style>"""
+        asset.replace("<link rel=\"stylesheet\" href=\"style.css\">", "<style>$stylesheet</style>")
+            .replace("</head>", "$colors</head>")
+    }
+    val base = "file:///android_asset/legal/"
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = LocalFloatingNavigationPadding.current)) {
         BackButton(onBack)
         AndroidView(factory = { context ->
             WebView(context).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 settings.javaScriptEnabled = false
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
+                settings.blockNetworkLoads = true
                 webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean =
-                        request.url.toString() !in listOf("file:///android_asset/legal/terms.html", "file:///android_asset/legal/privacy.html")
+                    override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                        documents.firstOrNull { request.url.toString() == "$base$it.html" }?.let { page = it }
+                        return true
+                    }
                 }
             }
         }, update = { view ->
-            val url = "file:///android_asset/legal/$page.html"
-            if (view.tag != page) { view.tag = page; view.loadUrl(url) }
+            if (view.tag != html) {
+                view.tag = html
+                view.loadDataWithBaseURL(base, html, "text/html", "UTF-8", null)
+            }
         }, onRelease = { it.stopLoading(); it.destroy() }, modifier = Modifier.fillMaxWidth().weight(1f))
     }
 }
+
+private fun Color.cssHex() = "#" + (toArgb() and 0xffffff).toString(16).padStart(6, '0')

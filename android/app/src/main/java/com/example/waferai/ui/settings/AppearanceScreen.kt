@@ -115,6 +115,13 @@ fun AppearanceScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ThemePreview(appearance)
+            SettingsCard {
+                val selected = appearance.accent == ThemeAccent.STARRY_NIGHT
+                SettingsLink("星夜主题", if (selected && !appearance.pureBlack && appearance.mode == ThemeMode.DARK) "正在使用" else "梵高《星夜》背景", "›") {
+                    onChange(appearance.copy(mode = ThemeMode.DARK, accent = ThemeAccent.STARRY_NIGHT,
+                        pureBlack = false, palette = PaletteStyle.VIVID))
+                }
+            }
             SectionTitle("☼", "主题模式")
             ThemeChoices(ThemeMode.entries, appearance.mode, { it.label }, { onChange(appearance.copy(mode = it)) }) { mode ->
                 ThemeMiniature(
@@ -137,7 +144,7 @@ fun AppearanceScreen(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    ThemeAccent.entries.filter { it != ThemeAccent.CUSTOM }.forEach { accent ->
+                    ThemeAccent.entries.filter { it != ThemeAccent.CUSTOM && it != ThemeAccent.STARRY_NIGHT }.forEach { accent ->
                         ColorSwatch(accent.label, accent.color, appearance.accent == accent, {
                             onChange(appearance.copy(accent = accent))
                         }, mark = if (accent == ThemeAccent.SYSTEM) "◈" else null)

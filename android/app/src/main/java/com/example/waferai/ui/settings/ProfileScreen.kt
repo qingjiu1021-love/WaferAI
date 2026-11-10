@@ -1,7 +1,6 @@
 package com.example.waferai.ui.settings
 
 import com.example.waferai.ui.theme.GlassTextButton as TextButton
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,14 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.example.waferai.R
 import com.example.waferai.data.local.WaferOverview
-import com.example.waferai.data.account.AccountUser
-import com.example.waferai.data.account.LocalUserProfile
+import com.example.waferai.data.local.LocalUserProfile
 import com.example.waferai.ui.theme.*
 import com.example.waferai.ui.theme.UiText as Text
 
@@ -24,7 +18,7 @@ import com.example.waferai.ui.theme.UiText as Text
 internal fun ProfileScreen(overview: WaferOverview?, modelCount: Int,
                            onTheme: () -> Unit, onLanguage: () -> Unit, onGeneral: () -> Unit,
                            onBackup: () -> Unit, onModels: () -> Unit, onHistory: () -> Unit,
-                           account: AccountUser?, onAccount: () -> Unit, onAbout: () -> Unit,
+                           onAbout: () -> Unit,
                            profile: LocalUserProfile, onEditProfile: () -> Unit,
                            modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
@@ -36,14 +30,11 @@ internal fun ProfileScreen(overview: WaferOverview?, modelCount: Int,
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 UserAvatar(profile)
                 Column(Modifier.weight(1f)) {
-                    Text(profile.name.ifBlank { account?.name ?: "访客" }, style = MaterialTheme.typography.titleLarge)
-                    Text(if (account == null) "本机访客资料" else "本机个人资料", style = MaterialTheme.typography.bodySmall)
+                    Text(profile.name.ifBlank { "本机用户" }, style = MaterialTheme.typography.titleLarge)
+                    Text("本机个人资料", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onEditProfile) { Text("编辑头像与昵称") }
-                TextButton(onAccount) { Text(if (account == null) "登录 / 注册" else "管理账号") }
-            }
+            TextButton(onEditProfile) { Text("编辑头像与昵称") }
         }
         SectionHeading("我的工作空间")
         StudioPanel(Modifier.fillMaxWidth()) {

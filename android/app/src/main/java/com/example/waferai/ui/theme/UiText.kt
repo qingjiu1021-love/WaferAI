@@ -78,6 +78,8 @@ private val formattedLabels = listOf(
 )
 
 private val englishLabels = mapOf(
+    "星夜主题" to "Starry Night theme",
+    "深蓝与暖金" to "Midnight blue and warm gold",
     "导入预览" to "Import preview",
     "确认导入" to "Confirm import",
     "旧记录 · 来源未标记" to "Existing record · source not tagged",
@@ -377,6 +379,16 @@ private val englishLabels = mapOf(
     "打开主题与恢复默认设置" to "Open theme and reset settings",
     "备份包括晶圆、批次、缺陷识别结果和已保存的晶圆解析。" to "Backups contain wafers, lots, predictions and saved wafer analyses.",
     "聊天记录、AI 配置、密钥和设置留在本机。" to "Chats, AI profiles, keys and settings stay on this device.",
+    "本机用户" to "Local user",
+    "本机个人资料" to "Local profile",
+    "头像和昵称仅保存在这台设备。" to "Your avatar and nickname are saved on this device.",
+    "在本机查看常见问题与操作指南" to "Read FAQs and instructions on this device",
+    "使用规则与第三方服务" to "Usage rules and third-party services",
+    "梵高《星夜》背景" to "Van Gogh’s Starry Night wallpaper",
+    "选择晶圆数据、ZIP 或 GZIP 压缩包，也可以使用当前晶圆。转换在手机本地完成。" to
+        "Choose a wafer data file, ZIP or GZIP archive, or use the current wafer. Conversion runs on this device.",
+    "选择压缩包内的晶圆文件" to "Choose a wafer file from the archive",
+    "无法打开系统相册。" to "Couldn't open the photo picker.",
     "导出备份" to "Export backup",
     "恢复备份" to "Restore backup",
     "恢复晶圆数据？" to "Restore wafer data?",

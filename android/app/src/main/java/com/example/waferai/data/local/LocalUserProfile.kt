@@ -1,4 +1,4 @@
-package com.example.waferai.data.account
+package com.example.waferai.data.local
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,26 +13,50 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.security.MessageDigest
+import java.security.KeyStore
+import org.json.JSONObject
 
 internal data class LocalUserProfile(val name: String = "", val avatar: String? = null)
 
 internal class LocalUserProfileStore(private val context: Context) {
-    fun key(origin: String, userId: String?) = MessageDigest.getInstance("SHA-256")
-        .digest((if (userId == null) "guest" else "$origin|$userId").toByteArray()).joinToString("") { "%02x".format(it) }
-    private fun file(key: String): AtomicFile {
-        require(key.matches(Regex("[a-f0-9]{64}")))
-        return AtomicFile(File(context.noBackupFilesDir, "user-profile-$key.json"))
+    private val file = AtomicFile(File(context.noBackupFilesDir, "user-profile.json"))
+
+    fun read(): LocalUserProfile {
+        val legacy = context.getSharedPreferences("account_session", Context.MODE_PRIVATE)
+        val profile = read(file) ?: run {
+            val id = legacy.getString("user", null)?.let { json ->
+                runCatching { JSONObject(json).optString("id") }.getOrNull()?.takeIf(String::isNotBlank)
+            }
+            val origin = legacy.getString("endpoint", null) ?: "https://waferai-help.sparsefirefly.chatgpt.site"
+            val saved = id?.let { readLegacy("$origin|$it") } ?: readLegacy("guest")
+            if (saved != null) write(saved)
+            saved ?: LocalUserProfile()
+        }
+        if (legacy.all.isNotEmpty()) {
+            KeyStore.getInstance("AndroidKeyStore").apply {
+                load(null)
+                deleteEntry("waferai-account-session-v1")
+            }
+            check(legacy.edit().clear().commit()) { "无法清理旧版登录状态。" }
+        }
+        return profile
     }
-    fun read(key: String): LocalUserProfile = try {
-        Gson().fromJson(file(key).readFully().toString(Charsets.UTF_8), LocalUserProfile::class.java)
-    } catch (_: FileNotFoundException) { LocalUserProfile() }
-    fun write(key: String, profile: LocalUserProfile) {
+
+    private fun readLegacy(identity: String): LocalUserProfile? {
+        val key = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
+        return read(AtomicFile(File(context.noBackupFilesDir, "user-profile-$key.json")))
+    }
+
+    private fun read(source: AtomicFile): LocalUserProfile? = try {
+        Gson().fromJson(source.readFully().toString(Charsets.UTF_8), LocalUserProfile::class.java)
+    } catch (_: FileNotFoundException) { null }
+
+    fun write(profile: LocalUserProfile) {
         require(profile.name.length <= 40 && profile.name.none(Char::isISOControl)) { "昵称最多 40 个字符，不能包含控制字符。" }
         require((profile.avatar?.length ?: 0) <= 180_000)
-        val target = file(key)
-        val output = target.startWrite()
-        try { output.write(Gson().toJson(profile).toByteArray()); target.finishWrite(output) }
-        catch (error: Exception) { target.failWrite(output); throw error }
+        val output = file.startWrite()
+        try { output.write(Gson().toJson(profile).toByteArray()); file.finishWrite(output) }
+        catch (error: Exception) { file.failWrite(output); throw error }
     }
     fun avatar(uri: Uri): String {
         val bytes = ByteArrayOutputStream().use { output ->

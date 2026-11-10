@@ -12,3 +12,5 @@
 - 4.10.0 的导航胶囊和分级玻璃参考 FlClash（GPL-3.0）提交 7c9627ff 的交互设计，使用独立的 Jetpack Compose 实现。Parquet 导出使用 hyparquet-writer 0.18.0 与 hyparquet 1.32.0（MIT）。版本锁定和入口在 `scripts/parquet-writer`，许可证随包置于 `assets/licenses`。
 
 - 4.10.2 的底栏继续以 Jetpack Compose 实现，采用 FlClash 同一提交的弹簧参数、速度形变公式和滑动时序。来源见 [FlClash 的 navigation_dock.dart](https://github.com/chen08209/FlClash/blob/7c9627fffb35f2615fbfaa64b4b3a0c5834c52ed/lib/ui/navigation_dock.dart)。
+
+- 星夜主题背景使用文森特·梵高 1889 年的《星夜》。随包图像将 Google Art Project 的公有领域复刻图转为 WebP，屏幕显示时裁切并叠加遮罩。作品收藏于纽约现代艺术博物馆。[图像来源及许可](https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg)

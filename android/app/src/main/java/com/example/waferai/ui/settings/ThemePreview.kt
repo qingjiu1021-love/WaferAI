@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -27,6 +28,10 @@ import androidx.compose.ui.unit.dp
 import com.example.waferai.ui.theme.Appearance
 import com.example.waferai.ui.theme.BottomBarStyle
 import com.example.waferai.ui.theme.GlassLevel
+import com.example.waferai.ui.theme.StarryNightBase
+import com.example.waferai.ui.theme.StarryNightCard
+import com.example.waferai.ui.theme.ThemeAccent
+import com.example.waferai.ui.theme.starryNightWallpaper
 
 @Composable
 internal fun ThemePreview(appearance: Appearance) {
@@ -39,7 +44,8 @@ internal fun ThemePreview(appearance: Appearance) {
             Modifier.fillMaxWidth().padding(22.dp).semantics { contentDescription = "WaferAI 主题实时预览" },
             contentAlignment = Alignment.Center
         ) {
-            ThemeMiniature(appearance, Modifier.widthIn(max = 158.dp).fillMaxWidth().aspectRatio(0.62f))
+            ThemeMiniature(appearance, Modifier.widthIn(max = 158.dp).fillMaxWidth().aspectRatio(0.62f),
+                showWallpaper = true)
         }
     }
 }
@@ -51,21 +57,26 @@ internal fun ThemeMiniature(
     darkOverride: Boolean? = null,
     split: Boolean = false,
     slide: Boolean = false,
-    fade: Boolean = false
+    fade: Boolean = false,
+    showWallpaper: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
     val dark = darkOverride ?: (scheme.background.luminance() < 0.4f)
+    val starry = appearance.accent == ThemeAccent.STARRY_NIGHT
     val background = when {
         dark && appearance.pureBlack -> Color.Black
+        dark && starry -> StarryNightBase
         dark -> Color(0xFF15161A)
         else -> Color(0xFFF7F7FC)
     }
-    val card = if (dark) Color(0xFF272930) else Color(0xFFE5E6EF)
+    val card = if (dark && starry) StarryNightCard else if (dark) Color(0xFF272930) else Color(0xFFE5E6EF)
     val detail = if (dark) Color(0xFF858995) else Color(0xFF8A8E9B)
     val accent = if (darkOverride == null) scheme.primary else lerp(
         scheme.primary, if (dark) Color.White else Color.Black, 0.22f
     )
-    Canvas(modifier) {
+    val painted = showWallpaper && dark && starry && !appearance.pureBlack
+    val miniature = if (painted) modifier.clip(RoundedCornerShape(9)).starryNightWallpaper(false) else modifier
+    Canvas(miniature) {
         val w = size.width
         val h = size.height
         val radius = w * 0.095f
@@ -74,7 +85,7 @@ internal fun ThemeMiniature(
                 color, Offset(w * x, h * y), Size(w * width, h * height), CornerRadius(w * corner)
             )
         }
-        drawRoundRect(background, cornerRadius = CornerRadius(radius))
+        if (!painted) drawRoundRect(background, cornerRadius = CornerRadius(radius))
         if (split) block(Color(0xFFF7F7FC), 0f, 0f, 0.49f, 1f, 0.09f)
         block(detail, 0.085f, 0.084f, 0.30f, 0.032f)
         drawCircle(detail, w * 0.025f, Offset(w * 0.88f, h * 0.10f))

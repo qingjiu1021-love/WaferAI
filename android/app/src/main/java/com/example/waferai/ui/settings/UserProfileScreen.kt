@@ -22,28 +22,26 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.waferai.data.account.*
+import com.example.waferai.data.local.LocalUserProfile
+import com.example.waferai.data.local.LocalUserProfileStore
 import com.example.waferai.ui.theme.*
 import com.example.waferai.ui.theme.UiText as Text
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal data class UserProfileState(val key: String = "", val profile: LocalUserProfile = LocalUserProfile(),
+internal data class UserProfileState(val profile: LocalUserProfile = LocalUserProfile(),
     val busy: Boolean = true, val error: String? = null, val message: String? = null)
 
 internal class UserProfileViewModel(application: Application) : AndroidViewModel(application) {
     private val store = LocalUserProfileStore(application)
     private val mutable = MutableStateFlow(UserProfileState())
     val state = mutable.asStateFlow()
-    fun select(origin: String, id: String?) {
-        val key = store.key(origin, id)
-        if (mutable.value.key == key) return
-        mutable.value = UserProfileState(key = key)
+    init {
         viewModelScope.launch {
-            try { val profile = withContext(Dispatchers.IO) { store.read(key) }; if (mutable.value.key == key) mutable.value = UserProfileState(key, profile, false) }
+            try { mutable.value = UserProfileState(withContext(Dispatchers.IO) { store.read() }, busy = false) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { if (mutable.value.key == key) mutable.value = UserProfileState(key, busy = false, error = "无法读取本机个人资料。") }
+            catch (_: Exception) { mutable.value = UserProfileState(busy = false, error = "无法读取本机个人资料。") }
         }
     }
     fun save(name: String, avatar: String?) {
@@ -52,9 +50,9 @@ internal class UserProfileViewModel(application: Application) : AndroidViewModel
         val profile = LocalUserProfile(name.trim(), avatar)
         mutable.value = old.copy(busy = true, error = null)
         viewModelScope.launch {
-            try { withContext(Dispatchers.IO) { store.write(old.key, profile) }; if (mutable.value.key == old.key) mutable.value = old.copy(profile = profile, message = "个人资料已保存。") }
+            try { withContext(Dispatchers.IO) { store.write(profile) }; mutable.value = old.copy(profile = profile, error = null, message = "个人资料已保存。") }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { if (mutable.value.key == old.key) mutable.value = old.copy(error = error.message ?: "保存失败，请重试。") }
+            catch (error: Exception) { mutable.value = old.copy(error = error.message ?: "保存失败，请重试。", message = null) }
         }
     }
     suspend fun readAvatar(uri: Uri): String = withContext(Dispatchers.IO) { store.avatar(uri) }
@@ -66,10 +64,10 @@ internal class UserProfileViewModel(application: Application) : AndroidViewModel
     else Image(bitmap, "用户头像", Modifier.size(size).clip(CircleShape), contentScale = ContentScale.Crop)
 }
 
-@Composable internal fun UserProfileScreen(state: UserProfileState, model: UserProfileViewModel, fallback: String,
+@Composable internal fun UserProfileScreen(state: UserProfileState, model: UserProfileViewModel,
     onBack: () -> Unit, modifier: Modifier = Modifier) {
-    var name by remember(state.key, state.profile.name) { mutableStateOf(state.profile.name.ifBlank { fallback }) }
-    var avatar by remember(state.key, state.profile.avatar) { mutableStateOf(state.profile.avatar) }
+    var name by remember(state.profile.name) { mutableStateOf(state.profile.name) }
+    var avatar by remember(state.profile.avatar) { mutableStateOf(state.profile.avatar) }
     var photoError by remember { mutableStateOf<String?>(null) }
     var reading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -96,10 +94,10 @@ internal class UserProfileViewModel(application: Application) : AndroidViewModel
         }
         OutlinedTextField(name, { name = it.take(40) }, Modifier.fillMaxWidth(), label = { Text("昵称") },
             supportingText = { Text("${name.length}/40") }, singleLine = true, enabled = !state.busy && !reading)
-        Text("头像和昵称按当前账号分别保存在这台设备，未登录时使用访客资料。不会修改 QQ、微信等平台的原始资料。", style = MaterialTheme.typography.bodySmall)
+        Text("头像和昵称仅保存在这台设备。", style = MaterialTheme.typography.bodySmall)
         if (state.busy || reading) LinearProgressIndicator(Modifier.fillMaxWidth())
         (photoError ?: state.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        GlassButton({ model.save(name, avatar) }, Modifier.fillMaxWidth(), enabled = !state.busy && !reading && name.isNotBlank()) { Text("保存个人资料") }
+        GlassButton({ model.save(name, avatar) }, Modifier.fillMaxWidth(), enabled = !state.busy && !reading) { Text("保存个人资料") }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -54,10 +55,43 @@ fun WaferAITheme(
         PaletteStyle.SOFT -> 0.70f
         PaletteStyle.NEUTRAL -> 0.35f
     }
-    val primary = readableAccent(styledSeed, dark)
+    val starry = appearance.accent == ThemeAccent.STARRY_NIGHT
+    val primary = readableAccent(styledSeed, dark,
+        background = if (starry && dark) StarryNightDeepCard else null)
     val onAccent = if (primary.luminance() > 0.179f) Color(0xFF111114) else Color.White
-    val scheme = remember(dark, appearance.pureBlack, primary, styledSeed, tintAmount) {
-        if (dark) {
+    val scheme = remember(dark, appearance.pureBlack, primary, styledSeed, tintAmount, starry) {
+        if (dark && starry) {
+            val base = if (appearance.pureBlack) Color.Black else StarryNightBase
+            val ink = Color(0xFFF9F4E9)
+            darkColorScheme(
+                primary = primary,
+                onPrimary = onAccent,
+                primaryContainer = lerp(StarryNightCard, primary, 0.075f * tintAmount),
+                onPrimaryContainer = ink,
+                secondary = Color(0xFFB1CAFB),
+                onSecondary = Color(0xFF142245),
+                secondaryContainer = Color(0xFF253B69),
+                onSecondaryContainer = Color(0xFFE1EBFF),
+                tertiary = Color(0xFF9ED6CD),
+                onTertiary = Color(0xFF103733),
+                tertiaryContainer = Color(0xFF214947),
+                onTertiaryContainer = Color(0xFFC2EEE6),
+                surfaceTint = primary,
+                background = base,
+                surface = base,
+                onSurface = ink,
+                onBackground = ink,
+                onSurfaceVariant = Color(0xFFC1CFEA),
+                outline = Color(0xFF8397BD),
+                outlineVariant = Color(0xFF415781),
+                surfaceVariant = Color(0xFF2B3D67),
+                surfaceContainerLowest = base,
+                surfaceContainerLow = Color(0xFF15213C),
+                surfaceContainer = StarryNightCard,
+                surfaceContainerHigh = Color(0xFF253961),
+                surfaceContainerHighest = StarryNightDeepCard
+            )
+        } else if (dark) {
             val base = if (appearance.pureBlack) Color.Black else Color(0xFF101012)
             val card = Color(0xFF1C1C1F)
             darkColorScheme(
@@ -116,6 +150,7 @@ fun WaferAITheme(
     val direction = if (language == AppLanguage.ARABIC) LayoutDirection.Rtl else LayoutDirection.Ltr
     CompositionLocalProvider(
         LocalDensity provides density, LocalGlassLevel provides appearance.glass,
+        LocalStarryNight provides (starry && dark),
         LocalAppLanguage provides language, LocalEnglish provides !language.chinese, LocalLayoutDirection provides direction
     ) {
         MaterialTheme(colorScheme = scheme, typography = typography, shapes = StudioShapes) {
@@ -124,13 +159,18 @@ fun WaferAITheme(
     }
 }
 
-internal fun readableAccent(seed: Color, dark: Boolean): Color {
-    val background = if (dark) Color(0xFF27272B) else Color(0xFFF2F2F7)
+internal val StarryNightBase = Color(0xFF0D1731)
+internal val StarryNightCard = Color(0xFF1B2B50)
+internal val LocalStarryNight = staticCompositionLocalOf { false }
+private val StarryNightDeepCard = Color(0xFF2B3C65)
+
+internal fun readableAccent(seed: Color, dark: Boolean, background: Color? = null): Color {
+    val backdrop = background ?: if (dark) Color(0xFF27272B) else Color(0xFFF2F2F7)
     val towards = if (dark) Color.White else Color.Black
     var color = lerp(seed.copy(alpha = 1f), towards, if (dark) 0.32f else 0.18f)
     repeat(24) {
-        val contrast = (maxOf(color.luminance(), background.luminance()) + 0.05f) /
-            (minOf(color.luminance(), background.luminance()) + 0.05f)
+        val contrast = (maxOf(color.luminance(), backdrop.luminance()) + 0.05f) /
+            (minOf(color.luminance(), backdrop.luminance()) + 0.05f)
         if (contrast >= 4.5f) return color
         color = lerp(color, towards, 0.08f)
     }

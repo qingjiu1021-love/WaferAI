@@ -16,6 +16,7 @@ enum class ThemeMode(val label: String) {
 
 enum class ThemeAccent(val label: String, val color: Color) {
     SYSTEM("壁纸取色", Color(0xFFC5CBD3)),
+    STARRY_NIGHT("星夜", Color(0xFFF0C36C)),
     BLUE("海蓝", Color(0xFF1680F5)),
     VIOLET("紫罗兰", Color(0xFFB541D4)),
     ROSE("玫红", Color(0xFFFF3470)),
@@ -62,8 +63,8 @@ enum class AppFont(val label: String, val family: FontFamily) {
 }
 
 data class Appearance(
-    val mode: ThemeMode = ThemeMode.SYSTEM,
-    val accent: ThemeAccent = ThemeAccent.BLUE,
+    val mode: ThemeMode = ThemeMode.DARK,
+    val accent: ThemeAccent = ThemeAccent.STARRY_NIGHT,
     val pureBlack: Boolean = false,
     val palette: PaletteStyle = PaletteStyle.VIVID,
     val customColor: Int = 0xFF1680F5.toInt(),
@@ -98,6 +99,7 @@ class AppearancePreferences(context: Context) {
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
 
     fun load(): Appearance {
+        val defaults = Appearance()
         val legacyScale = when (preferences.getString("font_size", null)) {
             "SMALL" -> 90
             "LARGE" -> 115
@@ -105,18 +107,18 @@ class AppearancePreferences(context: Context) {
             else -> 100
         }
         return Appearance(
-            mode = preferences.option("mode", ThemeMode.SYSTEM),
+            mode = preferences.option("mode", defaults.mode),
             analysisPreset = preferences.option("analysis_preset", com.example.waferai.data.ai.AnalysisPreset.ENGINEERING),
-            accent = preferences.option("accent", ThemeAccent.BLUE),
+            accent = preferences.option("accent", defaults.accent),
             pureBlack = preferences.getBoolean("pure_black", false),
             palette = preferences.option("palette", PaletteStyle.VIVID),
-            customColor = preferences.getInt("custom_color", Appearance().customColor),
+            customColor = preferences.getInt("custom_color", defaults.customColor),
             savedColors = preferences.getString("saved_colors", "").orEmpty()
                 .split(',').mapNotNull(String::toIntOrNull).take(8),
             bottomBar = preferences.option("bottom_bar", BottomBarStyle.FLOATING),
             tabMotion = preferences.option("tab_motion", TabMotion.SLIDE),
             glass = preferences.option("glass", GlassLevel.STANDARD),
-            navOpacity = preferences.getInt("nav_opacity", Appearance().navOpacity).coerceIn(35, 100),
+            navOpacity = preferences.getInt("nav_opacity", defaults.navOpacity).coerceIn(35, 100),
             chatMemory = preferences.getBoolean("chat_memory", true),
             font = preferences.option("font", AppFont.DEFAULT),
             downloadedFont = preferences.getString("downloaded_font", null),

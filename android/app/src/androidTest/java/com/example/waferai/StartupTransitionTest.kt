@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.example.waferai.ui.theme.StartupTransition
+import com.example.waferai.ui.theme.WaferSplashConfig
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -16,7 +17,7 @@ import org.junit.Test
 class StartupTransitionTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun firstFrameShowsIntroAndHomeIsPreparedDuringSweep() {
+    @Test fun coldStartCompletesBadgeBeforeRevealingHome() {
         var initializations = 0
         var completions = 0
         val completionTimes = mutableListOf<Long>()
@@ -34,9 +35,9 @@ class StartupTransitionTest {
             assertEquals(0, initializations)
             assertEquals(0, completions)
         }
-        compose.mainClock.advanceTimeBy(2300)
+        compose.mainClock.advanceTimeBy(WaferSplashConfig.totalMillis.toLong() - 200)
         compose.runOnIdle {
-            assertEquals("Finished before 2.5 seconds at $completionTimes", 0, completions)
+            assertEquals("Finished before the drawing ended at $completionTimes", 0, completions)
             assertEquals(1, initializations)
         }
         compose.onNodeWithContentDescription("WaferAI").assertExists()
@@ -61,7 +62,22 @@ class StartupTransitionTest {
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("Existing home").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, completions) }
-        compose.mainClock.advanceTimeBy(3000)
+        compose.mainClock.advanceTimeBy(WaferSplashConfig.totalMillis.toLong())
+        compose.runOnIdle { assertEquals(1, completions) }
+    }
+
+    @Test fun reducedMotionCompletesAfterThreeHundredMilliseconds() {
+        var completions = 0
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            StartupTransition(true, { completions++ }, reducedMotion = true) { Text("Existing home") }
+        }
+        compose.mainClock.advanceTimeBy(230)
+        compose.onNodeWithContentDescription("WaferAI").assertIsDisplayed()
+        compose.onNodeWithText("Existing home").assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(120)
+        compose.onNodeWithContentDescription("WaferAI").assertDoesNotExist()
+        compose.onNodeWithText("Existing home").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, completions) }
     }
 
@@ -73,3 +89,4 @@ class StartupTransitionTest {
         compose.onNodeWithContentDescription("WaferAI").assertDoesNotExist()
     }
 }
+

@@ -1,6 +1,6 @@
 package com.example.waferai
 
-import com.example.waferai.data.account.GithubUpdates
+import com.example.waferai.data.update.GithubUpdates
 import org.junit.Assert.*
 import org.junit.Test
 

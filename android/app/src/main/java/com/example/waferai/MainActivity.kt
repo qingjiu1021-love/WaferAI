@@ -3,8 +3,6 @@ package com.example.waferai
 import androidx.compose.foundation.background
 
 import android.os.Bundle
-import com.example.waferai.ui.account.AccountViewModel
-import com.example.waferai.ui.account.AccountScreen
 import com.example.waferai.ui.settings.AboutScreen
 import com.example.waferai.ui.settings.LegalScreen
 import android.animation.ValueAnimator
@@ -57,6 +55,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.core.view.WindowCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.example.waferai.data.local.WaferOverview
 import com.example.waferai.data.local.WaferYieldBand
 import com.example.waferai.data.ai.ChatStore
@@ -76,6 +75,8 @@ import com.example.waferai.ui.theme.DockBackdrop
 import com.example.waferai.ui.theme.GlassTabs
 import com.example.waferai.ui.theme.PrimaryTabHost
 import com.example.waferai.ui.theme.StartupTransition
+import com.example.waferai.ui.theme.preloadSplashArtwork
+import com.example.waferai.ui.theme.starryNightWallpaper
 import com.example.waferai.ui.theme.TabNavigation
 import com.example.waferai.ui.theme.recordDockBackdrop
 import com.example.waferai.ui.theme.rememberDockBackdrop
@@ -110,9 +111,11 @@ import com.example.waferai.ui.theme.glassSurface
 import com.example.waferai.ui.theme.GlassLevel
 import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import androidx.compose.runtime.mutableIntStateOf
 
-private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, LOT_STACK, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ACCOUNT, ABOUT, LEGAL }
+private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, LOT_STACK, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ABOUT, LEGAL }
 
 private val tabs = listOf(
     Page.WAFER to "晶圆",
@@ -171,7 +174,6 @@ private fun WaferBottomBar(
 }
 
 class MainActivity : ComponentActivity() {
-    private val accountViewModel: AccountViewModel by viewModels()
     private val userProfileViewModel: com.example.waferai.ui.settings.UserProfileViewModel by viewModels()
     private val updateViewModel: com.example.waferai.ui.settings.UpdateViewModel by viewModels()
     private companion object {
@@ -195,14 +197,20 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val animateLaunch = !launchShown && savedInstanceState == null && ValueAnimator.areAnimatorsEnabled()
+        val animateLaunch = !launchShown
         launchShown = true
+        val reduceLaunchMotion = animateLaunch && !ValueAnimator.areAnimatorsEnabled()
         var launchVisible by mutableStateOf(animateLaunch)
         if (animateLaunch) WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
         splashScreen.setOnExitAnimationListener { it.remove() }
+        var launchArtwork = if (animateLaunch && !reduceLaunchMotion) lifecycleScope.preloadSplashArtwork(resources) else null
+        var launchOverview = if (animateLaunch) lifecycleScope.async(Dispatchers.IO) {
+            val revision = repository.store.waferRevision.value
+            revision to repository.overview()
+        } else null
         val appContent: @Composable () -> Unit = {
             val appearancePreferences = remember { AppearancePreferences(applicationContext) }
             var appearance by remember { mutableStateOf(appearancePreferences.load()) }
@@ -251,15 +259,7 @@ class MainActivity : ComponentActivity() {
                 val lotState by lotViewModel.state.collectAsStateWithLifecycle()
                 val aiState by aiViewModel.state.collectAsStateWithLifecycle()
                 val chatBusy by chatViewModel.busy.collectAsStateWithLifecycle()
-                val accountState by accountViewModel.state.collectAsStateWithLifecycle()
                 val userProfileState by userProfileViewModel.state.collectAsStateWithLifecycle()
-                LaunchedEffect(accountState.endpoint, accountState.user?.id) { userProfileViewModel.select(accountState.endpoint, accountState.user?.id) }
-                LaunchedEffect(accountState.browser) {
-                    accountState.browser?.let { url ->
-                        runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-                            .onSuccess { accountViewModel.browserOpened() }.onFailure { accountViewModel.browserFailed() }
-                    }
-                }
                 val csvState by historyViewModel.csv.collectAsStateWithLifecycle()
                 val backup by backupViewModel.state.collectAsStateWithLifecycle()
                 val training by repository.trainingSummary.collectAsStateWithLifecycle()
@@ -272,8 +272,6 @@ class MainActivity : ComponentActivity() {
                     TabNavigation(pageState, primaryPages, navigationScope)
                 }
                 val page by navigation.page
-                var accountReturn by rememberSaveable { mutableStateOf(Page.PROFILE) }
-                var legalReturn by rememberSaveable { mutableStateOf(Page.ABOUT) }
                 var legalDocument by rememberSaveable { mutableStateOf("terms") }
                 var themeReturn by rememberSaveable { mutableStateOf(Page.PROFILE) }
                 var chatOrigin by rememberSaveable { mutableStateOf(Page.AI) }
@@ -297,7 +295,7 @@ class MainActivity : ComponentActivity() {
                     derivedStateOf {
                         when (val current = page) {
                             Page.HISTORY, Page.LOTS, Page.LOT_STACK, Page.COMPARE, Page.TREND -> Page.DATA
-                            Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL, Page.ACCOUNT,
+                            Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL,
                             Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
                             Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
                             Page.PLUGINS -> if (pluginReturn == Page.AI || pluginReturn == Page.CHAT) Page.AI else Page.TOOLS
@@ -337,8 +335,7 @@ class MainActivity : ComponentActivity() {
                         page == Page.MODELS -> navigation.navigate(modelReturn)
                         page == Page.COMPARE || page == Page.LOT_STACK -> navigation.navigate(Page.HISTORY)
                         page == Page.APPEARANCE -> navigation.navigate(themeReturn)
-                        page == Page.LEGAL -> navigation.navigate(legalReturn)
-                        page == Page.ACCOUNT -> navigation.navigate(accountReturn)
+                        page == Page.LEGAL -> navigation.navigate(Page.ABOUT)
                         page == Page.ABOUT -> navigation.navigate(Page.PROFILE)
                         page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL, Page.PROFILE_EDIT) -> navigation.navigate(Page.PROFILE)
                         page in setOf(Page.LOGS, Page.KNOWLEDGE, Page.TRAINING) -> navigation.navigate(Page.TOOLS)
@@ -372,13 +369,8 @@ class MainActivity : ComponentActivity() {
                     navigation.navigate(Page.HISTORY)
                 }
                 PageEffects(pageState) { current ->
-                    BackHandler(enabled = backup.busy || aiState.draft != null || current != appearance.startTab.page() ||
-                        (current == Page.WAFER && (waferReturn != null || importState.wafer != null)), onBack = goBack)
-                    LaunchedEffect(accountState.message, current) {
-                        if (current != Page.ACCOUNT && accountState.error) {
-                            accountState.message?.let { settingsSnackbar.showSnackbar(it) }
-                        }
-                    }
+                    BackHandler(enabled = !launchVisible && (backup.busy || aiState.draft != null || current != appearance.startTab.page() ||
+                        (current == Page.WAFER && (waferReturn != null || importState.wafer != null))), onBack = goBack)
                     LaunchedEffect(current, aiState.draft, aiState.saving, directModelAdd) {
                         if (current == Page.MODELS && directModelAdd) {
                             if (aiState.draft != null) directEditorSeen = true
@@ -414,7 +406,11 @@ class MainActivity : ComponentActivity() {
                 }
                 LaunchedEffect(waferRevision) {
                     try {
-                        overview = repository.overview()
+                        val pending = launchOverview
+                        launchOverview = null
+                        val prepared = pending?.await()
+                        overview = if (prepared != null && prepared.first == waferRevision) prepared.second
+                            else repository.overview()
                         overviewError = null
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -470,7 +466,7 @@ class MainActivity : ComponentActivity() {
                 val showBottomBar = remember(ime, density) {
                     derivedStateOf {
                         val current = page
-                        current != Page.APPEARANCE && current != Page.CHAT && aiState.draft == null &&
+                        current != Page.CHAT && aiState.draft == null &&
                             !backup.busy && !(current in setOf(Page.AI, Page.WAFER_TEST) && ime.getBottom(density) > 0)
                     }
                 }
@@ -507,15 +503,18 @@ class MainActivity : ComponentActivity() {
                         navigation = navigation,
                         motion = appearance.tabMotion,
                         prepareTabs = !launchVisible,
-                        modifier = Modifier.fillMaxSize().padding(
-                            start = insets.calculateStartPadding(direction),
-                            top = insets.calculateTopPadding(),
-                            end = insets.calculateEndPadding(direction),
-                            bottom = if (overlayBottomBar) 0.dp else barClearance
-                        ).clipToBounds().recordDockBackdrop(backdrop.takeIf { overlayBottomBar }, pageBackground)
+                        modifier = Modifier.fillMaxSize()
+                            .recordDockBackdrop(backdrop.takeIf { overlayBottomBar }, pageBackground)
+                            .starryNightWallpaper(appearance.pureBlack)
+                            .padding(
+                                start = insets.calculateStartPadding(direction),
+                                top = insets.calculateTopPadding(),
+                                end = insets.calculateEndPadding(direction),
+                                bottom = if (overlayBottomBar) 0.dp else barClearance
+                            ).clipToBounds()
                     ) { destination ->
-                        // Scrolling pages extend under the glass. The chat composer needs its own safe area.
-                        val drawBehindBar = overlayBottomBar && destination !in setOf(Page.AI, Page.CHAT, Page.APPEARANCE)
+                        // Keep the composer, theme controls and web documents clear of the glass.
+                        val drawBehindBar = overlayBottomBar && destination !in setOf(Page.AI, Page.CHAT, Page.APPEARANCE, Page.LEGAL)
                         val modifier = Modifier.fillMaxSize()
                             .padding(bottom = if (overlayBottomBar && !drawBehindBar) barClearance else 0.dp)
                         CompositionLocalProvider(LocalFloatingNavigationPadding provides
@@ -638,23 +637,16 @@ class MainActivity : ComponentActivity() {
                                         onTheme = { themeReturn = Page.PROFILE; navigation.navigate(Page.APPEARANCE) },
                                         onLanguage = { navigation.navigate(Page.LANGUAGE) }, onGeneral = { navigation.navigate(Page.GENERAL) },
                                         onBackup = { navigation.navigate(Page.BACKUP) }, onModels = { openModels(false) },
-                                        onHistory = openHistory, account = accountState.user,
-                                        onAccount = { accountReturn = Page.PROFILE; navigation.navigate(Page.ACCOUNT) },
+                                        onHistory = openHistory,
                                         profile = userProfileState.profile, onEditProfile = { navigation.navigate(Page.PROFILE_EDIT) },
                                         onAbout = { navigation.navigate(Page.ABOUT) }, modifier = modifier
                                     )
                                     Page.PROFILE_EDIT -> com.example.waferai.ui.settings.UserProfileScreen(userProfileState, userProfileViewModel,
-                                        accountState.user?.name ?: "访客", goBack, modifier)
-                                    Page.ACCOUNT -> AccountScreen(accountState, accountViewModel, goBack,
-                                        onLegal = { legalReturn = Page.ACCOUNT; legalDocument = it; navigation.navigate(Page.LEGAL) },
-                                        modifier = modifier.consumeWindowInsets(insets))
-                                    Page.ABOUT -> AboutScreen(goBack, onHelp = {
-                                        if (accountState.user == null) {
-                                            accountReturn = Page.ABOUT
-                                            navigation.navigate(Page.ACCOUNT)
-                                            accountViewModel.hint("请先登录，再打开帮助中心。")
-                                        } else accountViewModel.help()
-                                    }, onLegal = { legalReturn = Page.ABOUT; legalDocument = it; navigation.navigate(Page.LEGAL) }, updates = updateViewModel, modifier = modifier)
+                                        goBack, modifier)
+                                    Page.ABOUT -> AboutScreen(goBack, onDocument = {
+                                        legalDocument = it
+                                        navigation.navigate(Page.LEGAL)
+                                    }, updates = updateViewModel, modifier = modifier)
                                     Page.LEGAL -> LegalScreen(legalDocument, goBack, modifier)
                                     Page.LOGS -> OperationLogScreen(repository.operationLog, goBack, modifier)
                                     Page.PLUGINS -> SearchPluginsScreen(container.knowledge, goBack, modifier)
@@ -745,8 +737,19 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            StartupTransition(animateLaunch, onFinished = { launchVisible = false }, content = appContent)
+            StartupTransition(
+                enabled = animateLaunch,
+                onFinished = {
+                    launchArtwork?.cancel()
+                    launchArtwork = null
+                    launchVisible = false
+                },
+                preloadedArtwork = launchArtwork,
+                reducedMotion = reduceLaunchMotion,
+                content = appContent,
+            )
         }
     }
 }
+
 

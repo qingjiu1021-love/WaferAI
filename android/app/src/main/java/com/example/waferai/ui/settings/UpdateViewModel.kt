@@ -2,8 +2,8 @@ package com.example.waferai.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.waferai.data.account.AppRelease
-import com.example.waferai.data.account.GithubUpdates
+import com.example.waferai.data.update.AppRelease
+import com.example.waferai.data.update.GithubUpdates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -211,13 +211,14 @@ internal fun GlassTabs(
                 val color = when {
                     !enabled -> scheme.onSurface.copy(alpha = 0.38f)
                     underLens -> scheme.primary
+                    icon != null -> scheme.onSurface
                     else -> scheme.onSurfaceVariant
                 }
                 Column(
                     Modifier.weight(1f).selectable(
                         selected = selected, enabled = enabled, role = Role.Tab,
                         interactionSource = null, indication = null, onClick = { onSelect(index) }
-                    ).heightIn(min = if (icon == null) 48.dp else 54.dp)
+                    ).heightIn(min = if (icon == null) 48.dp else 60.dp)
                         .padding(horizontal = 2.dp, vertical = 5.dp)
                         .graphicsLayer {
                             val frame = motion.frame
@@ -231,7 +232,7 @@ internal fun GlassTabs(
                 ) {
                     icon?.invoke(index, color)
                     UiText(label, maxLines = 1, color = color, style = (if (icon == null)
-                        MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelSmall).copy(
+                        MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium).copy(
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium))
                 }
             }

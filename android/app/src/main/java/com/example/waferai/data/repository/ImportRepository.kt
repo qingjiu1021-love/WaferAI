@@ -31,6 +31,7 @@ import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.report.WaferPdfReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -40,6 +41,17 @@ import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.CodingErrorAction
+import java.util.Locale
+import java.util.zip.CheckedInputStream
+import java.util.zip.CRC32
+import java.util.zip.GZIPInputStream
+import java.util.zip.ZipException
+import java.util.zip.ZipFile
+
+internal sealed interface ConversionSource {
+    data class Wafer(val detail: WaferDetail) : ConversionSource
+    data class Archive(val names: List<String>) : ConversionSource
+}
 
 class ImportRepository(private val context: Context) {
     private val resolver = context.contentResolver
@@ -165,28 +177,84 @@ class ImportRepository(private val context: Context) {
         store.saveParsed(parsed)
     }
 
-    internal suspend fun readForConversion(uri: Uri): WaferDetail = withContext(Dispatchers.IO) {
-        readWaferFile(uri).detail
+    internal suspend fun readForConversion(uri: Uri, archiveEntry: String? = null): ConversionSource = withContext(Dispatchers.IO) {
+        val name = displayName(uri) ?: "wafer.json"
+        when (name.substringAfterLast('.').lowercase(Locale.ROOT)) {
+            "zip" -> readZipConversion(uri, archiveEntry)
+            "gz", "gzip" -> {
+                val waferName = name.substringBeforeLast('.')
+                require(WaferFileFormat.fromFilename(waferName) != null) { "GZIP 文件名应保留晶圆扩展名，例如 wafer.stdf.gz。" }
+                val parsed = try {
+                    openSource(uri).use { source -> GZIPInputStream(source).use { parseWaferFile(waferName, it) } }
+                } catch (_: ZipException) {
+                    throw IOException("无法解压 GZIP 文件，请检查文件是否完整。")
+                }
+                ConversionSource.Wafer(parsed.detail)
+            }
+            else -> {
+                require(WaferFileFormat.fromFilename(name) != null) { "请选择晶圆数据、ZIP 或 GZIP 文件。" }
+                ConversionSource.Wafer(openSource(uri).use { parseWaferFile(name, it).detail })
+            }
+        }
     }
 
-    private suspend fun readWaferFile(uri: Uri): ParsedWafer {
-        val name = displayName(uri) ?: "wafer.json"
+    private suspend fun readZipConversion(uri: Uri, selected: String?): ConversionSource {
+        val temporary = File.createTempFile("wafer-zip-", ".zip", context.cacheDir)
+        val job = currentCoroutineContext()
+        try {
+            BoundedInput(openSource(uri), 64L * 1024 * 1024).use { source ->
+                temporary.outputStream().buffered().use { target ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        job.ensureActive()
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        target.write(buffer, 0, count)
+                    }
+                }
+            }
+            ZipFile(temporary).use { zip ->
+                require(zip.size() <= 512) { "ZIP 最多支持 512 个条目。" }
+                val entries = zip.entries().asSequence().filter { entry ->
+                    !entry.isDirectory && entry.name.split('/').none { it.startsWith('.') || it == "__MACOSX" } &&
+                        WaferFileFormat.fromFilename(entry.name.substringAfterLast('/')) != null
+                }.toList()
+                require(entries.isNotEmpty()) { "ZIP 内没有可转换的晶圆数据文件。" }
+                require(entries.map { it.name }.toSet().size == entries.size) { "ZIP 含同路径的重名晶圆文件。" }
+                val entry = if (selected == null) entries.singleOrNull() else
+                    entries.firstOrNull { it.name == selected } ?: error("压缩包内容已变化，请重新选择源文件。")
+                if (entry == null) return ConversionSource.Archive(entries.map { it.name })
+                val name = entry.name.substringAfterLast('/')
+                val crc = CRC32()
+                val parsed = CheckedInputStream(zip.getInputStream(entry), crc).use { parseWaferFile(name, it) }
+                require(crc.value == entry.crc) { "ZIP 中的晶圆文件校验失败。" }
+                return ConversionSource.Wafer(parsed.detail)
+            }
+        } catch (_: ZipException) {
+            throw IOException("无法解压 ZIP 文件，请检查文件是否完整或已加密。")
+        } finally {
+            temporary.delete()
+        }
+    }
+
+    private suspend fun readWaferFile(uri: Uri): ParsedWafer =
+        openSource(uri).use { parseWaferFile(displayName(uri) ?: "wafer.json", it) }
+
+    private suspend fun parseWaferFile(name: String, source: InputStream): ParsedWafer {
         val format = WaferFileFormat.fromFilename(name)
             ?: throw IllegalArgumentException("请选择 STDF、ATDF、CSV、JSON 或 Parquet 晶圆数据。")
+        val job = currentCoroutineContext()
         if (format == WaferFileFormat.CSV) {
-            val source = resolver.openInputStream(uri) ?: throw IOException("无法打开文件，请重新选择。")
             val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-            val job = kotlinx.coroutines.currentCoroutineContext()
-            return InputStreamReader(BoundedInput(source, WaferCoordinateCsv.MAX_BYTES.toLong()), decoder).use { reader ->
-                WaferCoordinateCsv.parse(reader, name) { job.ensureActive() }
-            }
+            val reader = InputStreamReader(BoundedInput(source, WaferCoordinateCsv.MAX_BYTES.toLong()), decoder)
+            return WaferCoordinateCsv.parse(reader, name) { job.ensureActive() }
         }
         val limit = when (format) {
             WaferFileFormat.JSON -> WaferJson.MAX_BYTES
             WaferFileFormat.ATDF -> WaferTestData.MAX_ATDF_BYTES
             else -> WaferTestData.MAX_BYTES
         }
-        val bytes = readFile(uri, limit)
+        val bytes = readBytes(source, limit) { job.ensureActive() }
         return when (format) {
             WaferFileFormat.STDF -> WaferTestData.stdf(bytes, name)
             WaferFileFormat.ATDF -> WaferTestData.atdf(bytes, name)
@@ -231,17 +299,22 @@ class ImportRepository(private val context: Context) {
                     if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
                 }
 
-    private fun readFile(uri: Uri, limit: Int): ByteArray = resolver.openInputStream(uri)?.use { input ->
+    private fun openSource(uri: Uri) = resolver.openInputStream(uri) ?: throw IOException("无法打开文件，请重新选择。")
+
+    private fun readFile(uri: Uri, limit: Int): ByteArray = openSource(uri).use { readBytes(it, limit) }
+
+    private fun readBytes(input: InputStream, limit: Int, checkCancelled: () -> Unit = {}): ByteArray {
         val output = ByteArrayOutputStream()
         val buffer = ByteArray(8192)
         while (true) {
+            checkCancelled()
             val count = input.read(buffer)
             if (count < 0) break
             require(output.size() + count <= limit) { "文件不能超过 ${limit / (1024 * 1024)} MB。" }
             output.write(buffer, 0, count)
         }
-        output.toByteArray()
-    } ?: throw IOException("无法打开文件，请重新选择。")
+        return output.toByteArray()
+    }
 
     private suspend fun <T> logged(operation: LogOperation, block: suspend () -> T): T = withContext(Dispatchers.IO) {
         try {

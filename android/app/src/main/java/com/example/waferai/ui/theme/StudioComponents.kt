@@ -91,7 +91,7 @@ internal fun StudioAction(
         border = if (grouped) null else BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f))) {
         Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            StudioBadge(icon, size = 30)
+            StudioBadge(icon, size = 36)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -105,15 +105,23 @@ internal fun StudioAction(
 @Composable
 internal fun StudioBadge(icon: StudioIcon, size: Int = 36) {
     val scheme = MaterialTheme.colorScheme
-    val accent = when (icon) {
+    val starry = LocalStarryNight.current
+    val accent = if (starry) when (icon) {
+        StudioIcon.DATA, StudioIcon.LANGUAGE, StudioIcon.BACKUP, StudioIcon.BOOK -> scheme.secondary
+        else -> scheme.primary
+    } else when (icon) {
         StudioIcon.BOOK, StudioIcon.MEMORY -> Color(0xFFAF74EA)
         StudioIcon.TRAINING, StudioIcon.DATA -> Color(0xFF38AA8C)
         StudioIcon.FILE, StudioIcon.CLOCK, StudioIcon.CONVERT -> Color(0xFFDB9754)
         else -> scheme.primary
     }
-    Box(Modifier.size(size.dp).background(accent.copy(alpha = 0.12f), RoundedCornerShape((size / 3).dp)),
+    val shape = RoundedCornerShape((size / 3).dp)
+    val background = if (starry) Modifier.background(
+        Brush.linearGradient(listOf(accent.copy(alpha = 0.26f), accent.copy(alpha = 0.09f))), shape
+    ) else Modifier.background(accent.copy(alpha = 0.12f), shape)
+    Box(Modifier.size(size.dp).then(background),
         contentAlignment = Alignment.Center) {
-        StudioGlyph(icon, Modifier.size((size * 0.56f).dp), accent)
+        StudioGlyph(icon, Modifier.size((size * 0.65f).dp), accent)
     }
 }
 
@@ -125,7 +133,7 @@ internal data class StudioLink(val title: String, val detail: String, val icon: 
         Column {
             links.forEachIndexed { index, link ->
                 StudioAction(link.title, link.detail, link.icon, link.onClick, grouped = true)
-                if (index < links.lastIndex) HorizontalDivider(Modifier.padding(start = 58.dp), thickness = 0.5.dp,
+                if (index < links.lastIndex) HorizontalDivider(Modifier.padding(start = 64.dp), thickness = 0.5.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             }
         }
@@ -133,10 +141,12 @@ internal data class StudioLink(val title: String, val detail: String, val icon: 
 }
 
 @Composable
-internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = MaterialTheme.colorScheme.primary,
+                         navigation: Boolean = false) {
+    val starry = LocalStarryNight.current
     Canvas(modifier) {
         val u = size.minDimension / 24f
-        val stroke = 1.7f * u
+        val stroke = (if (starry || navigation) 2.05f else 1.7f) * u
         fun point(x: Float, y: Float) = Offset(x * u, y * u)
         fun line(x: Float, y: Float, a: Float, b: Float) {
             drawLine(color, point(x, y), point(a, b), stroke, StrokeCap.Round)
@@ -146,8 +156,27 @@ internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = Ma
         }
         when (icon) {
             StudioIcon.WAFER -> {
-                drawCircle(color, 9f * u, point(12f, 12f), style = Stroke(stroke))
-                line(7f, 9f, 17f, 9f); line(7f, 15f, 17f, 15f); line(12f, 5f, 12f, 19f)
+                if (starry) {
+                    val orbit = Stroke(stroke, cap = StrokeCap.Round)
+                    drawPath(Path().apply {
+                        moveTo(3.5f * u, 18.5f * u)
+                        cubicTo(3.1f * u, 17.7f * u, 3.8f * u, 16.7f * u, 4.8f * u, 15.5f * u)
+                        moveTo(19.6f * u, 9.3f * u)
+                        cubicTo(20.7f * u, 9.3f * u, 21.4f * u, 9.6f * u, 21.8f * u, 10.3f * u)
+                    }, color.copy(alpha = 0.62f), style = orbit)
+                    drawCircle(color, 7.4f * u, point(12f, 12f), style = Stroke(stroke))
+                    line(7.2f, 10f, 16.8f, 10f)
+                    line(12f, 7f, 12f, 14.2f)
+                    drawPath(Path().apply {
+                        moveTo(21.8f * u, 10.3f * u)
+                        cubicTo(23.6f * u, 13.7f * u, 5.6f * u, 22.4f * u, 3.5f * u, 18.5f * u)
+                    }, color, style = orbit)
+                } else {
+                    drawCircle(color, 9f * u, point(12f, 12f), style = Stroke(stroke))
+                    line(7f, 9f, 17f, 9f)
+                    line(7f, 15f, 17f, 15f)
+                    line(12f, 5f, 12f, 19f)
+                }
             }
             StudioIcon.DATA -> {
                 line(4f, 20f, 20f, 20f)
@@ -159,7 +188,8 @@ internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = Ma
                     lineTo(15f * u, 15f * u); lineTo(12f * u, 22f * u); lineTo(9f * u, 15f * u)
                     lineTo(2f * u, 12f * u); lineTo(9f * u, 9f * u); close()
                 }
-                drawPath(star, color, style = Stroke(stroke))
+                if (starry || navigation) drawPath(star, color)
+                else drawPath(star, color, style = Stroke(stroke))
             }
             StudioIcon.TOOLS -> listOf(6f to 9f, 12f to 16f, 18f to 12f).forEach { (y, x) ->
                 line(3f, y, 21f, y); drawCircle(color, 2.4f * u, point(x, y))
@@ -175,8 +205,19 @@ internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = Ma
                 line(8f, 12f, 4f, 16f); line(4f, 16f, 8f, 20f)
             }
             StudioIcon.THEME -> {
-                drawCircle(color, 5.5f * u, point(12f, 12f), style = Stroke(stroke))
-                line(12f, 2f, 12f, 4f); line(12f, 20f, 12f, 22f); line(2f, 12f, 4f, 12f); line(20f, 12f, 22f, 12f)
+                if (starry) {
+                    drawPath(Path().apply {
+                        moveTo(13f * u, 3f * u)
+                        cubicTo(4f * u, 4f * u, 1f * u, 13f * u, 6f * u, 18f * u)
+                        cubicTo(10f * u, 23f * u, 18f * u, 22f * u, 21f * u, 16f * u)
+                        cubicTo(12f * u, 18f * u, 8f * u, 10f * u, 13f * u, 3f * u)
+                        close()
+                    }, color)
+                    line(18f, 5f, 18f, 11f); line(15f, 8f, 21f, 8f)
+                } else {
+                    drawCircle(color, 5.5f * u, point(12f, 12f), style = Stroke(stroke))
+                    line(12f, 2f, 12f, 4f); line(12f, 20f, 12f, 22f); line(2f, 12f, 4f, 12f); line(20f, 12f, 22f, 12f)
+                }
             }
             StudioIcon.LANGUAGE -> {
                 drawCircle(color, 9f * u, point(12f, 12f), style = Stroke(stroke))
@@ -269,11 +310,23 @@ internal fun StudioGlyph(icon: StudioIcon, modifier: Modifier, color: Color = Ma
 
 @Composable
 internal fun WaferArtwork(modifier: Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
+    val scheme = MaterialTheme.colorScheme
+    val primary = scheme.primary
+    val starry = LocalStarryNight.current
     Canvas(modifier) {
         val unit = size.minDimension
         val radius = unit * 0.40f
         val center = Offset(size.width * 0.5f, size.height * 0.5f)
+        if (starry) {
+            for (arc in 0..4) {
+                val band = radius * (0.84f + arc * 0.080f)
+                val paint = if (arc == 3) primary else scheme.secondary
+                drawArc(paint.copy(alpha = if (arc == 3) 0.58f else 0.36f),
+                    startAngle = 143f + arc * 10f, sweepAngle = 100f - arc * 8f,
+                    useCenter = false, topLeft = center - Offset(band, band),
+                    size = Size(band * 2f, band * 2f), style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round))
+            }
+        }
         drawCircle(Brush.radialGradient(listOf(primary.copy(alpha = 0.22f), Color.Transparent),
             center, radius * 1.32f), radius * 1.32f, center)
         drawCircle(primary.copy(alpha = 0.29f), radius * 1.12f, center, style = Stroke(0.8.dp.toPx()))

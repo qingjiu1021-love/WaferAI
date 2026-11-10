@@ -70,6 +70,7 @@ import com.example.waferai.ui.theme.LocalEnglish
 import com.example.waferai.ui.theme.StudioIcon
 import com.example.waferai.ui.theme.StudioPanel
 import com.example.waferai.ui.theme.WaferArtwork
+import com.example.waferai.ui.theme.LocalStarryNight
 import java.util.Locale
 
 private enum class WaferPanel(val label: String) { MAP("晶圆图"), DETECT("AI 检测"), REPORT("分析报告") }
@@ -145,7 +146,7 @@ fun WaferHomeScreen(
         StudioHeader("晶圆工作台", "WAFERAI / WORKSPACE", StudioIcon.WAFER, compact = true, action = {
             val label = if (LocalEnglish.current) "Convert wafer file" else "晶圆文件转换"
             IconButton(onOpenConverter, modifier = Modifier.semantics { contentDescription = label }) {
-                StudioGlyph(StudioIcon.CONVERT, Modifier.size(19.dp), Color(0xFFDB9754))
+                StudioGlyph(StudioIcon.CONVERT, Modifier.size(25.dp))
             }
         })
         if (wafer == null) {
@@ -366,8 +367,12 @@ private fun WorkspaceIntro(onImport: () -> Unit, onImage: () -> Unit, onDemo: ()
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(26.dp)
     val art = if (LocalDensity.current.fontScale > 1.25f) 84.dp else 124.dp
+    val starry = LocalStarryNight.current
     Column(Modifier.fillMaxWidth().clip(shape)
-        .background(Brush.linearGradient(listOf(scheme.primaryContainer, scheme.surfaceContainer)))
+        .background(Brush.horizontalGradient(listOf(
+            scheme.primaryContainer.copy(alpha = if (starry) 0.93f else 1f),
+            scheme.surfaceContainer.copy(alpha = if (starry) 0.74f else 1f)
+        )))
         .border(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f), shape).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

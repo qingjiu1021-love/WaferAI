@@ -7,6 +7,7 @@ import com.example.waferai.ui.theme.GlassDropdownMenu as DropdownMenu
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -58,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -75,6 +77,7 @@ import com.example.waferai.data.ai.readableReply
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.testTag
 import com.example.waferai.data.ai.ChatTurn
+import com.example.waferai.data.ai.ChatSource
 import com.example.waferai.data.ai.thinkingOptions
 import com.example.waferai.data.remote.WaferDetail
 import com.example.waferai.data.remote.WaferPrediction
@@ -119,7 +122,7 @@ internal fun ChatScreen(
     var pendingCapture by rememberSaveable { mutableStateOf<String?>(null) }
     var textDialog by rememberSaveable { mutableStateOf(false) }
     var memoryDialog by rememberSaveable { mutableStateOf(false) }
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { viewModel.attach(it, photo = true) }
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -317,7 +320,9 @@ internal fun ChatScreen(
                                 },
                                 onPhoto = {
                                     attachMenu = false
-                                    photoPicker.launch(arrayOf("image/*"))
+                                    focus.clearFocus()
+                                    runCatching { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                                        .onFailure { viewModel.photoPickerUnavailable() }
                                 },
                                 onFiles = { attachMenu = false; fileActions = true },
                                 onPlugins = { attachMenu = false; focus.clearFocus(); onOpenPlugins() },
@@ -462,26 +467,24 @@ private fun ChatProgress(stage: String?, startedAt: Long, pending: Boolean) {
 }
 
 @Composable
-private fun ChatTurnItem(turn: ChatTurn, onSource: (String) -> Unit) {
+internal fun ChatTurnItem(turn: ChatTurn, onSource: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ChatBubble(if (turn.waferSummary == null) "我" else "我 · 已附晶圆摘要",
             turn.question + turn.attachmentName?.let { "\n附件：$it" }.orEmpty(), user = true)
-        ChatBubble(turn.model, turn.reply, user = false)
-        turn.searchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (!turn.sources.isNullOrEmpty()) StudioPanel(Modifier.fillMaxWidth()) {
-            Text("联网来源 · 网页摘要", style = MaterialTheme.typography.labelLarge)
-            turn.sources.orEmpty().forEachIndexed { index, source ->
-                TextButton({ onSource(source.url) }) {
-                    Text("[${index + 1}] ${source.title}", maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
+        val legacySourceDump = turn.model == LocalWaferAssistant.Name && !turn.sources.isNullOrEmpty() &&
+            turn.reply.startsWith("已检索到以下网页摘要。基础助手展示检索资料；")
+        val reply = if (!legacySourceDump) turn.reply else if (LocalEnglish.current) {
+            "Use the arrow next to the model name to see related web summaries."
+        } else "已找到相关网页，可展开模型名称旁的箭头查看摘要。"
+        ChatBubble(turn.model, reply, user = false, sources = turn.sources.orEmpty(), searchNotice = turn.searchNotice, onSource = onSource)
     }
 }
 
 @Composable
-private fun ChatBubble(title: String, body: String, user: Boolean) {
+private fun ChatBubble(title: String, body: String, user: Boolean, sources: List<ChatSource> = emptyList(),
+                       searchNotice: String? = null, onSource: (String) -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
         Card(
             modifier = Modifier.fillMaxWidth(if (user) 0.88f else 1f),
@@ -493,10 +496,30 @@ private fun ChatBubble(title: String, body: String, user: Boolean) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!user) StudioBadge(StudioIcon.AI, 24)
-                    Text(title, style = MaterialTheme.typography.labelLarge, color = if (user) scheme.onPrimary.copy(alpha = 0.8f) else scheme.primary)
+                    Text(title, modifier = Modifier.weight(1f, fill = false), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge, color = if (user) scheme.onPrimary.copy(alpha = 0.8f) else scheme.primary)
+                    if (sources.isNotEmpty()) {
+                        val label = if (LocalEnglish.current) {
+                            if (expanded) "Hide web summaries" else "Show web summaries"
+                        } else if (expanded) "收起网页摘要" else "展开网页摘要"
+                        IconButton({ expanded = !expanded }, modifier = Modifier.semantics { contentDescription = label }) {
+                            StudioGlyph(StudioIcon.ARROW, Modifier.size(17.dp).rotate(if (expanded) -90f else 90f))
+                        }
+                    }
                 }
                 val display = remember(body, user) { if (user) body else readableReply(body) }
                 SelectionContainer { androidx.compose.material3.Text(display, color = if (user) scheme.onPrimary else scheme.onSurface) }
+                searchNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant) }
+                if (expanded && sources.isNotEmpty()) {
+                    Text("联网来源 · 网页摘要", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+                    sources.forEachIndexed { index, source ->
+                        TextButton({ onSource(source.url) }) { Text("[${index + 1}] ${source.title}") }
+                        if (source.snippet.isNotBlank()) {
+                            SelectionContainer { androidx.compose.material3.Text(source.snippet,
+                                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant) }
+                        }
+                    }
+                }
             }
         }
     }

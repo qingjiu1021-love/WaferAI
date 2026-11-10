@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app draws the wafer as part of its opening animation. -->
+<!-- The first app frame draws the opening scene directly. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <size android:width="288dp" android:height="288dp" />
     <solid android:color="@android:color/transparent" />

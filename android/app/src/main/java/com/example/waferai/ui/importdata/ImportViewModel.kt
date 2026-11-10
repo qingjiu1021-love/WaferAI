@@ -11,6 +11,7 @@ import com.example.waferai.data.local.WaferFileFormat
 import com.example.waferai.data.local.WaferImageOptions
 import com.example.waferai.data.report.ReportSnapshot
 import com.example.waferai.data.repository.ImportRepository
+import com.example.waferai.data.repository.ConversionSource
 import com.example.waferai.data.local.AiAnalysis
 import com.example.waferai.data.local.InspectionRecord
 import com.example.waferai.data.local.ParsedWafer
@@ -49,8 +50,11 @@ internal data class ConversionUiState(
     val wafer: WaferDetail? = null,
     val busy: Boolean = false,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val archive: ConversionArchive? = null
 )
+
+internal data class ConversionArchive(val uri: Uri, val entries: List<String>, val selected: String? = null)
 
 class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     init { viewModelScope.launch { repository.restoreTraining() } }
@@ -73,16 +77,28 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     }
 
     internal fun selectConversionFile(uri: Uri) {
+        readConversion(uri, archive = null)
+    }
+
+    internal fun selectConversionEntry(name: String) {
+        val archive = mutableConversion.value?.archive ?: return
+        if (name in archive.entries) readConversion(archive.uri, archive.copy(selected = name))
+    }
+
+    private fun readConversion(uri: Uri, archive: ConversionArchive?) {
         val state = mutableConversion.value ?: return
         if (state.busy) return
-        mutableConversion.value = ConversionUiState(busy = true)
+        mutableConversion.value = ConversionUiState(busy = true, archive = archive)
         viewModelScope.launch {
             try {
-                mutableConversion.value = ConversionUiState(repository.readForConversion(uri))
+                mutableConversion.value = when (val source = repository.readForConversion(uri, archive?.selected)) {
+                    is ConversionSource.Wafer -> ConversionUiState(source.detail, archive = archive)
+                    is ConversionSource.Archive -> ConversionUiState(archive = ConversionArchive(uri, source.names))
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                mutableConversion.value = ConversionUiState(error = error.message ?: "无法读取晶圆文件。")
+                mutableConversion.value = ConversionUiState(error = error.message ?: "无法读取晶圆文件。", archive = archive)
             }
         }
     }
@@ -91,15 +107,15 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         val state = mutableConversion.value ?: return
         val wafer = state.wafer ?: return
         if (state.busy) return
-        mutableConversion.value = ConversionUiState(wafer, busy = true)
+        mutableConversion.value = state.copy(busy = true, message = null, error = null)
         viewModelScope.launch {
             try {
                 repository.convertFile(uri, wafer, format)
-                mutableConversion.value = ConversionUiState(wafer, message = "已保存 ${format.name} 文件。")
+                mutableConversion.value = state.copy(message = "已保存 ${format.name} 文件。", error = null)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                mutableConversion.value = ConversionUiState(wafer, error = error.message ?: "转换或保存失败。")
+                mutableConversion.value = state.copy(message = null, error = error.message ?: "转换或保存失败。")
             }
         }
     }

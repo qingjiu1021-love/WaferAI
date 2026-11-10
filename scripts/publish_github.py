@@ -93,7 +93,7 @@ def stage(source, checkout):
         shutil.copy2(source / relative, target)
     command(["git", "add", "--all"], cwd=checkout)
     paths = command(["git", "ls-files"], cwd=checkout, capture=True).splitlines()
-    for required in ["android/app/src/main/java/com/example/waferai/data/account/AccountClient.kt", "android/app/src/main/java/com/example/waferai/data/account/GithubUpdates.kt", "android/gradle/wrapper/gradle-wrapper.jar", "backend/.env.accounts.example"]:
+    for required in ["android/app/src/main/java/com/example/waferai/data/update/GithubUpdates.kt", "android/gradle/wrapper/gradle-wrapper.jar"]:
         if required not in paths:
             raise ValueError("Required source was excluded: " + required)
     print(json.dumps({"source_files": len(paths), "checkout": str(checkout), "repository": remote}, ensure_ascii=False))

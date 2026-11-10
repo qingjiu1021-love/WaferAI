@@ -32,6 +32,21 @@ class PerformanceUiTest {
     @get:Rule val compose = createComposeRule()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Test fun webSummariesStayCollapsedUntilTheArrowIsTapped() {
+        val source = ChatSource("晶圆检测来源", "https://example.org/wafer", "网页提供的原始摘要", "Test", 0)
+        val turn = ChatTurn("如何检测？", "可按晶圆坐标核对测试结果。[1]", "Test Model", sources = listOf(source))
+        var clicked: String? = null
+        compose.setContent { WaferAITheme { ChatTurnItem(turn) { clicked = it } } }
+        compose.onNodeWithText("可按晶圆坐标核对测试结果。[1]").assertIsDisplayed()
+        compose.onNodeWithText(source.snippet).assertDoesNotExist()
+        compose.onNodeWithContentDescription("展开网页摘要").performClick()
+        compose.onNodeWithText(source.snippet).assertIsDisplayed()
+        compose.onNodeWithText("[1] ${source.title}").performClick()
+        compose.runOnIdle { assertEquals(source.url, clicked) }
+        compose.onNodeWithContentDescription("收起网页摘要").performClick()
+        compose.onNodeWithText(source.snippet).assertDoesNotExist()
+    }
+
     @Test fun maximumMatrixIsPreparedOffMainAndRemainsSelectableAfterPinch() {
         val mainReads = AtomicInteger()
         val workerReads = AtomicInteger()
