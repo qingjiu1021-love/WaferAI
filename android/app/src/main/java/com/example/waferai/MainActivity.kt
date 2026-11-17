@@ -92,7 +92,7 @@ import com.example.waferai.ui.settings.BackupScreen
 import com.example.waferai.ui.settings.GeneralScreen
 import com.example.waferai.ui.settings.LanguageScreen
 import com.example.waferai.ui.settings.ToolsScreen
-import com.example.waferai.ui.settings.ProfileScreen
+import com.example.waferai.ui.importdata.BatchAnalysisViewModel
 import com.example.waferai.ui.settings.OperationLogScreen
 import com.example.waferai.ui.settings.KnowledgeScreen
 import com.example.waferai.ui.settings.AiTasksScreen
@@ -115,14 +115,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import androidx.compose.runtime.mutableIntStateOf
 
-private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, LOT_STACK, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, PROFILE_EDIT, ABOUT, LEGAL }
+private enum class Page { OVERVIEW, WAFER, WAFER_TEST, DATA, HISTORY, LOTS, LOT_STACK, AI, APPEARANCE, CHAT, COMPARE, TOOLS, LANGUAGE, BACKUP, GENERAL, MODELS, LOGS, KNOWLEDGE, TRAINING, TREND, PLUGINS, TASKS, PROFILE, ABOUT, LEGAL }
 
 private val tabs = listOf(
     Page.WAFER to "晶圆",
     Page.DATA to "数据",
     Page.AI to "AI",
-    Page.TOOLS to "工具",
-    Page.PROFILE to "我的"
+    Page.TOOLS to "工具"
 )
 
 private val tabLabels = tabs.map { it.second }
@@ -138,7 +137,6 @@ private fun StartTab.page(): Page = when (this) {
     StartTab.DATA -> Page.DATA
     StartTab.AI -> Page.AI
     StartTab.TOOLS -> Page.TOOLS
-    StartTab.PROFILE -> Page.PROFILE
 }
 
 @Composable
@@ -154,11 +152,10 @@ private fun WaferBottomBar(
     val base = Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets)
     val surface = if (floating) {
         Modifier.clip(shape)
-            .sampleDockBackdrop(backdrop, appearance.glass)
             .glassSurface(scheme.surfaceContainer, scheme.primary, shape,
                 appearance.glass, scheme.surface.luminance() < 0.4f, appearance.navOpacity / 100f)
     } else {
-        Modifier.background(scheme.surfaceContainer)
+        Modifier.background(scheme.surfaceContainer.copy(alpha = appearance.navOpacity / 100f))
     }
     GlassTabs(
         labels = tabLabels,
@@ -174,7 +171,7 @@ private fun WaferBottomBar(
 }
 
 class MainActivity : ComponentActivity() {
-    private val userProfileViewModel: com.example.waferai.ui.settings.UserProfileViewModel by viewModels()
+    private val batchViewModel: BatchAnalysisViewModel by viewModels { BatchAnalysisViewModel.Factory(repository.localAnalysis) }
     private val updateViewModel: com.example.waferai.ui.settings.UpdateViewModel by viewModels()
     private companion object {
         var launchShown = false
@@ -214,6 +211,8 @@ class MainActivity : ComponentActivity() {
         val appContent: @Composable () -> Unit = {
             val appearancePreferences = remember { AppearancePreferences(applicationContext) }
             var appearance by remember { mutableStateOf(appearancePreferences.load()) }
+            var opacityPreview by remember { mutableStateOf<Int?>(null) }
+            var panelOpacityPreview by remember { mutableStateOf<Int?>(null) }
             LaunchedEffect(appearance.autoKnowledge, appearance.knowledgeHours) {
                 KnowledgeSyncJob.configure(applicationContext, container.knowledge)
             }
@@ -244,7 +243,7 @@ class MainActivity : ComponentActivity() {
                     return false
                 }
             }
-            WaferAITheme(appearance) {
+            WaferAITheme(appearance.copy(panelOpacity = panelOpacityPreview ?: appearance.panelOpacity)) {
                 val lightBars = !launchVisible && MaterialTheme.colorScheme.background.luminance() > 0.5f
                 SideEffect {
                     WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -254,12 +253,12 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val importState by importViewModel.state.collectAsStateWithLifecycle()
+                val batchState by batchViewModel.state.collectAsStateWithLifecycle()
                 val guideState by importViewModel.guide.collectAsStateWithLifecycle()
                 val historyState by historyViewModel.state.collectAsStateWithLifecycle()
                 val lotState by lotViewModel.state.collectAsStateWithLifecycle()
                 val aiState by aiViewModel.state.collectAsStateWithLifecycle()
                 val chatBusy by chatViewModel.busy.collectAsStateWithLifecycle()
-                val userProfileState by userProfileViewModel.state.collectAsStateWithLifecycle()
                 val csvState by historyViewModel.csv.collectAsStateWithLifecycle()
                 val backup by backupViewModel.state.collectAsStateWithLifecycle()
                 val training by repository.trainingSummary.collectAsStateWithLifecycle()
@@ -273,7 +272,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val page by navigation.page
                 var legalDocument by rememberSaveable { mutableStateOf("terms") }
-                var themeReturn by rememberSaveable { mutableStateOf(Page.PROFILE) }
+                var themeReturn by rememberSaveable { mutableStateOf(Page.TOOLS) }
                 var chatOrigin by rememberSaveable { mutableStateOf(Page.AI) }
                 var taskReturn by rememberSaveable { mutableStateOf(Page.AI) }
                 var pluginReturn by rememberSaveable { mutableStateOf(Page.TOOLS) }
@@ -296,22 +295,21 @@ class MainActivity : ComponentActivity() {
                         when (val current = page) {
                             Page.HISTORY, Page.LOTS, Page.LOT_STACK, Page.COMPARE, Page.TREND -> Page.DATA
                             Page.APPEARANCE, Page.LANGUAGE, Page.BACKUP, Page.GENERAL,
-                            Page.ABOUT, Page.LEGAL, Page.PROFILE_EDIT -> Page.PROFILE
+                            Page.ABOUT, Page.LEGAL, Page.PROFILE -> Page.TOOLS
                             Page.LOGS, Page.KNOWLEDGE, Page.TRAINING -> Page.TOOLS
                             Page.PLUGINS -> if (pluginReturn == Page.AI || pluginReturn == Page.CHAT) Page.AI else Page.TOOLS
                             Page.TASKS -> Page.AI
                             Page.OVERVIEW, Page.WAFER_TEST -> Page.WAFER
                             Page.MODELS -> when (modelReturn) {
                                 Page.WAFER -> Page.WAFER
-                                Page.PROFILE -> Page.PROFILE
+                                Page.TOOLS -> Page.TOOLS
                                 else -> Page.AI
                             }
                             else -> current
                         }
                     }
                 }
-                val canRestoreBackup = !importState.loading && !importState.predicting &&
-                    !importState.exporting && !importState.analyzing && !csvState.busy
+                val canRestoreBackup = !importState.busy && !batchState.running && !csvState.busy
                 val goBack: () -> Unit = {
                     when {
                         backup.busy -> Unit
@@ -336,8 +334,8 @@ class MainActivity : ComponentActivity() {
                         page == Page.COMPARE || page == Page.LOT_STACK -> navigation.navigate(Page.HISTORY)
                         page == Page.APPEARANCE -> navigation.navigate(themeReturn)
                         page == Page.LEGAL -> navigation.navigate(Page.ABOUT)
-                        page == Page.ABOUT -> navigation.navigate(Page.PROFILE)
-                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL, Page.PROFILE_EDIT) -> navigation.navigate(Page.PROFILE)
+                        page == Page.ABOUT -> navigation.navigate(Page.TOOLS)
+                        page in setOf(Page.BACKUP, Page.LANGUAGE, Page.GENERAL) -> navigation.navigate(Page.TOOLS)
                         page in setOf(Page.LOGS, Page.KNOWLEDGE, Page.TRAINING) -> navigation.navigate(Page.TOOLS)
                         else -> navigation.navigate(appearance.startTab.page())
                     }
@@ -394,6 +392,7 @@ class MainActivity : ComponentActivity() {
                         importViewModel.clearForServerChange()
                         historyViewModel.clearForServerChange()
                         lotViewModel.clearForServerChange()
+                        batchViewModel.clearFinished()
                         lotId = null
                         lotCode = null
                         yieldBand = null
@@ -418,6 +417,28 @@ class MainActivity : ComponentActivity() {
                         overviewError = "无法读取本机统计。"
                     }
                 }
+                var showBatch by rememberSaveable { mutableStateOf(false) }
+                var batchExportId by rememberSaveable { mutableStateOf<String?>(null) }
+                val batchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+                    if (uris.isNotEmpty()) { showBatch = true; batchViewModel.add(uris, appearance.yieldThreshold) }
+                }
+                val batchReportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+                    val id = batchExportId
+                    batchExportId = null
+                    if (uri != null && id != null) batchViewModel.export(id, uri)
+                }
+                if (showBatch) com.example.waferai.ui.importdata.BatchAnalysisSheet(
+                    batchState, batchViewModel,
+                    onAdd = { runCatching { batchPicker.launch(arrayOf("*/*")) }.onFailure { settingsMessage = "无法打开文件选择器。" } },
+                    onOpen = { showBatch = false; openWafer(it) },
+                    onExport = { item ->
+                        batchExportId = item.id
+                        runCatching { batchReportPicker.launch("WaferAI_${item.waferId}.pdf") }.onFailure {
+                            batchExportId = null; settingsMessage = "无法打开报告保存位置。"
+                        }
+                    },
+                    onDismiss = { showBatch = false }
+                )
                 val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     uri?.let(importViewModel::previewFile)
                 }
@@ -470,9 +491,8 @@ class MainActivity : ComponentActivity() {
                             !backup.busy && !(current in setOf(Page.AI, Page.WAFER_TEST) && ime.getBottom(density) > 0)
                     }
                 }
-                val floatingGlass = appearance.bottomBar == BottomBarStyle.FLOATING &&
-                    appearance.glass != GlassLevel.NONE
-                val backdrop = rememberDockBackdrop(floatingGlass && !launchVisible, navigation.moving)
+                // Clear glass reveals the original page directly; no blurred backdrop layer.
+                val backdrop: DockBackdrop? = null
                 val pageBackground = MaterialTheme.colorScheme.background
                 val focus = LocalFocusManager.current
                 WaferConversionDialog(importViewModel)
@@ -488,7 +508,7 @@ class MainActivity : ComponentActivity() {
                     snackbarHost = { SnackbarHost(settingsSnackbar) },
                     bottomBar = {
                         if (showBottomBar.value) {
-                            WaferBottomBar(appearance, selectedTab.value, backdrop) {
+                            WaferBottomBar(appearance.copy(navOpacity = opacityPreview ?: appearance.navOpacity), selectedTab.value, backdrop) {
                                 if (page == Page.AI && it != Page.AI) focus.clearFocus()
                                 waferReturn = null
                                 navigation.navigate(it)
@@ -498,7 +518,7 @@ class MainActivity : ComponentActivity() {
                 ) { insets ->
                     val direction = LocalLayoutDirection.current
                     val barClearance = insets.calculateBottomPadding()
-                    val overlayBottomBar = showBottomBar.value && floatingGlass
+                    val overlayBottomBar = showBottomBar.value
                     PrimaryTabHost(
                         navigation = navigation,
                         motion = appearance.tabMotion,
@@ -626,23 +646,16 @@ class MainActivity : ComponentActivity() {
                                         active = pageState.value == destination,
                                         modifier = modifier.consumeWindowInsets(insets)
                                     )
-                                    Page.TOOLS -> ToolsScreen(
+                                    Page.TOOLS, Page.PROFILE -> ToolsScreen(
                                         onLogs = { navigation.navigate(Page.LOGS) },
                                         onKnowledge = { navigation.navigate(Page.KNOWLEDGE) }, onTrain = { navigation.navigate(Page.TRAINING) },
-                                        onPlugins = { pluginReturn = Page.TOOLS; navigation.navigate(Page.PLUGINS) }, modifier = modifier
-                                    )
-                                    Page.TRAINING -> TrainingScreen(repository, goBack, modifier)
-                                    Page.PROFILE -> ProfileScreen(
-                                        overview, aiState.library.profiles.size,
-                                        onTheme = { themeReturn = Page.PROFILE; navigation.navigate(Page.APPEARANCE) },
+                                        onPlugins = { pluginReturn = Page.TOOLS; navigation.navigate(Page.PLUGINS) },
+                                        onTheme = { themeReturn = Page.TOOLS; navigation.navigate(Page.APPEARANCE) },
                                         onLanguage = { navigation.navigate(Page.LANGUAGE) }, onGeneral = { navigation.navigate(Page.GENERAL) },
                                         onBackup = { navigation.navigate(Page.BACKUP) }, onModels = { openModels(false) },
-                                        onHistory = openHistory,
-                                        profile = userProfileState.profile, onEditProfile = { navigation.navigate(Page.PROFILE_EDIT) },
                                         onAbout = { navigation.navigate(Page.ABOUT) }, modifier = modifier
                                     )
-                                    Page.PROFILE_EDIT -> com.example.waferai.ui.settings.UserProfileScreen(userProfileState, userProfileViewModel,
-                                        goBack, modifier)
+                                    Page.TRAINING -> TrainingScreen(repository, goBack, modifier)
                                     Page.ABOUT -> AboutScreen(goBack, onDocument = {
                                         legalDocument = it
                                         navigation.navigate(Page.LEGAL)
@@ -676,6 +689,8 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Page.APPEARANCE -> AppearanceScreen(
                                         appearance = appearance,
+                                        onPreviewOpacity = { opacityPreview = it },
+                                        onPreviewPanelOpacity = { panelOpacityPreview = it },
                                         onChange = { saveAppearance(it) },
                                         onReset = { saveAppearance(Appearance(), restoreDefaults = true) },
                                         canReset = !aiState.saving && !importState.analyzing && !chatBusy,
@@ -688,6 +703,12 @@ class MainActivity : ComponentActivity() {
                                     Page.OVERVIEW, Page.WAFER -> WaferHomeScreen(
                                         importState = importState,
                                         onOpenConverter = importViewModel::openConversion,
+                                        onOpenBatch = { showBatch = true },
+                                        onAnalyzeAll = { importViewModel.analyzeAll(appearance.yieldThreshold) },
+                                        onCancelLocal = importViewModel::cancelLocalAnalysis,
+                                        readingMode = appearance.reportReading,
+                                        onReadingMode = { saveAppearance(appearance.copy(reportReading = it)) },
+                                        queueBusy = batchState.running,
                                         onOpenTest = { navigation.navigate(Page.WAFER_TEST) },
                                         tabMotion = appearance.tabMotion,
                                         guideState = guideState, onSaveGuideFile = saveGuideFile,
@@ -737,6 +758,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
+            androidx.activity.compose.ReportDrawnWhen { !launchVisible }
             StartupTransition(
                 enabled = animateLaunch,
                 onFinished = {
@@ -751,5 +773,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+
+
 
 

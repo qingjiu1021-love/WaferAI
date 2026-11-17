@@ -58,7 +58,9 @@ internal fun rememberDockBackdrop(enabled: Boolean, tabMoving: State<Boolean>): 
 internal fun Modifier.recordDockBackdrop(backdrop: DockBackdrop?, background: Color): Modifier {
     if (backdrop == null) return this
     return onGloballyPositioned { backdrop.origin = it.positionInRoot() }.drawWithContent {
-        if (!drawContext.canvas.nativeCanvas.isHardwareAccelerated) {
+        // The dock does not sample while a tab is moving. Avoid recording an
+        // unused full-screen layer during those frames as well as skipping blur.
+        if (!drawContext.canvas.nativeCanvas.isHardwareAccelerated || !backdrop.canSample) {
             drawContent()
             return@drawWithContent
         }

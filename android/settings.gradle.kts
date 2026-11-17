@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WaferAI"
 include(":app")
+include(":macrobenchmark")

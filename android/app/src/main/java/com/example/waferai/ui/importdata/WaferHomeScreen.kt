@@ -8,7 +8,6 @@ import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -32,13 +30,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,11 +46,9 @@ import com.example.waferai.data.local.DemoWafer
 import com.example.waferai.data.local.WaferOverview
 import com.example.waferai.data.local.WaferSource
 import com.example.waferai.ui.theme.SectionHeading
-import com.example.waferai.ui.theme.WorkspaceMetric
 import com.example.waferai.ui.theme.WaferRecordCard
 import com.example.waferai.ui.theme.YieldRing
 import com.example.waferai.ui.theme.StatusPill
-import com.example.waferai.ui.theme.ActionTile
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import com.example.waferai.ui.theme.GlassButton
@@ -69,8 +61,6 @@ import com.example.waferai.ui.theme.tabTransition
 import com.example.waferai.ui.theme.LocalEnglish
 import com.example.waferai.ui.theme.StudioIcon
 import com.example.waferai.ui.theme.StudioPanel
-import com.example.waferai.ui.theme.WaferArtwork
-import com.example.waferai.ui.theme.LocalStarryNight
 import java.util.Locale
 
 private enum class WaferPanel(val label: String) { MAP("晶圆图"), DETECT("AI 检测"), REPORT("分析报告") }
@@ -110,14 +100,26 @@ fun WaferHomeScreen(
     onHistory: () -> Unit,
     onOpenWafer: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onOpenBatch: () -> Unit = {},
+    onAnalyzeAll: () -> Unit = {},
+    onCancelLocal: () -> Unit = {},
+    readingMode: Boolean = true,
+    onReadingMode: (Boolean) -> Unit = {},
+    queueBusy: Boolean = false
 ) {
-    val busy=importState.loading || importState.predicting || importState.exporting || importState.analyzing
+    val busy=importState.busy || queueBusy
     var showGuide by rememberSaveable { mutableStateOf(false) }
     var showDemoPicker by rememberSaveable { mutableStateOf(false) }
     var panel by rememberSaveable(importState.wafer?.id) { mutableStateOf(WaferPanel.MAP) }
     val scroll = rememberScrollState()
     val wafer = importState.wafer
+    LaunchedEffect(importState.localStage != null) {
+        if (importState.localStage != null) scroll.scrollTo(0)
+    }
+    LaunchedEffect(importState.reportGeneration, wafer?.id) {
+        if (importState.reportGeneration > 0 && importState.reportReady) panel = WaferPanel.REPORT
+    }
     val computedSummary by androidx.compose.runtime.produceState<Pair<com.example.waferai.data.analysis.MatrixIdentity, com.example.waferai.data.analysis.WaferSummary>?>(null, com.example.waferai.data.analysis.MatrixIdentity(wafer), yieldThreshold) {
         value = wafer?.let { current -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             com.example.waferai.data.analysis.MatrixIdentity(current) to com.example.waferai.data.analysis.WaferSummary.calculate(current, yieldThreshold)
@@ -139,11 +141,16 @@ fun WaferHomeScreen(
         onImage = { showGuide = false; onSelectImage() }, onDismiss = { showGuide = false })
 
     Column(
-        modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
+        modifier.fillMaxSize().then(if (panel == WaferPanel.REPORT && readingMode && wafer != null)
+            Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = .97f)) else Modifier)
+            .verticalScroll(scroll).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         onBack?.let { BackButton(it, enabled = !busy) }
         StudioHeader("晶圆工作台", "WAFERAI / WORKSPACE", StudioIcon.WAFER, compact = true, action = {
+            IconButton(onOpenBatch, enabled = !importState.busy, modifier = Modifier.semantics { contentDescription = "批量分析" }) {
+                StudioGlyph(StudioIcon.FILE, Modifier.size(23.dp))
+            }
             val label = if (LocalEnglish.current) "Convert wafer file" else "晶圆文件转换"
             IconButton(onOpenConverter, modifier = Modifier.semantics { contentDescription = label }) {
                 StudioGlyph(StudioIcon.CONVERT, Modifier.size(25.dp))
@@ -151,23 +158,27 @@ fun WaferHomeScreen(
         })
         if (wafer == null) {
             WorkspaceIntro(onSelectFile, onSelectImage, { showDemoPicker = true }, { showGuide = true }, enabled = !busy)
-            StudioAction("测试仿真与结果回放", "教学仿真 · 历史结果回放", StudioIcon.DATA, onOpenTest)
-            StudioPanel(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WorkspaceMetric("已存晶圆", overview?.wafers?.toString() ?: "—", Modifier.weight(1f))
-                    WorkspaceMetric("批次", overview?.lots?.toString() ?: "—", Modifier.weight(1f))
-                    WorkspaceMetric("总体良率", overview?.yieldRate?.let { String.format(Locale.CHINA, "%.1f%%", it * 100) } ?: "—", Modifier.weight(1f))
-                }
-            }
-            SectionHeading("继续分析", "历史记录", onHistory)
+            SectionHeading("最近记录", "历史记录", onHistory)
             if (overview?.recent.isNullOrEmpty()) Text("导入数据或载入演示，检测结果会自动保存在手机。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             overview?.recent?.take(3)?.forEach { record -> WaferRecordCard(record, { onOpenWafer(record.id) }, threshold = yieldThreshold) }
+            SectionHeading("更多工具")
+            StudioAction("批量分析", "多文件导入、检测与报告", StudioIcon.FILE, onOpenBatch)
+            StudioAction("测试仿真与结果回放", "教学仿真 · 历史结果回放", StudioIcon.DATA, onOpenTest)
         }
         if (importState.loading) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
             Text("正在读取并导入晶圆数据…")
         }
         importState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (queueBusy) TextButton(onOpenBatch) { Text("批量分析进行中，查看进度") }
+        importState.localStage?.let { stage ->
+            StudioPanel(Modifier.fillMaxWidth()) {
+                Text("一键分析 · ${stage.label}")
+                LinearProgressIndicator(progress = { stage.fraction }, modifier = Modifier.fillMaxWidth())
+                TextButton(onCancelLocal) { Text("取消分析") }
+            }
+        }
+        importState.localError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (wafer != null) {
             StudioPanel(Modifier.fillMaxWidth()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -212,7 +223,8 @@ fun WaferHomeScreen(
                                 }
                             }
                         }
-                        GlassButton({ panel = WaferPanel.DETECT }, Modifier.fillMaxWidth(), prominent = true) { Text("进入 AI 检测") }
+                        GlassButton(onAnalyzeAll, Modifier.fillMaxWidth(), enabled = !busy, prominent = true) { Text("一键分析并生成报告") }
+                        TextButton({ panel = WaferPanel.DETECT }) { Text("进入 AI 检测") }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onSelectFile, enabled = !busy) { Text("更换数据") }
                             TextButton(onSelectImage, enabled = !busy) { Text("导入图片") }
@@ -291,6 +303,21 @@ fun WaferHomeScreen(
                         TextButton(onChat) { Text("在 AI 对话中追问") }
                     }
                     if (displayedPanel == WaferPanel.REPORT) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("报告阅读模式", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                            androidx.compose.material3.Switch(readingMode, onReadingMode,
+                                Modifier.semantics { contentDescription = "报告阅读模式" })
+                        }
+                        StudioPanel(Modifier.fillMaxWidth()) {
+                            Text(if (100L * wafer.goodCount < yieldThreshold.toLong() * wafer.totalCount) "低于排查阈值，建议检查异常区域" else "达到当前良率排查阈值",
+                                style = MaterialTheme.typography.titleMedium)
+                            importState.prediction?.let { Text("缺陷模式：${it.labelZh}") }
+                            summary?.findings?.firstOrNull { it.indices.isNotEmpty() }?.let { finding ->
+                                Text(finding.detail, style = MaterialTheme.typography.bodySmall)
+                                TextButton({ focusId = finding.id; focusRevision++; panel = WaferPanel.MAP }) { Text("查看异常位置") }
+                            }
+                            if (importState.reportReady) Text("PDF 报告已在本机生成，可导出保存。", style = MaterialTheme.typography.bodySmall)
+                        }
                         if (summary == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                         else key(wafer.id) {
                             ReportCharts(wafer, prepared = summary.report)
@@ -365,32 +392,17 @@ private fun scorePercent(score: Double): String = when {
 @Composable
 private fun WorkspaceIntro(onImport: () -> Unit, onImage: () -> Unit, onDemo: () -> Unit, onGuide: () -> Unit, enabled: Boolean) {
     val scheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(26.dp)
-    val art = if (LocalDensity.current.fontScale > 1.25f) 84.dp else 124.dp
-    val starry = LocalStarryNight.current
-    Column(Modifier.fillMaxWidth().clip(shape)
-        .background(Brush.horizontalGradient(listOf(
-            scheme.primaryContainer.copy(alpha = if (starry) 0.93f else 1f),
-            scheme.surfaceContainer.copy(alpha = if (starry) 0.74f else 1f)
-        )))
-        .border(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f), shape).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                StatusPill("端侧智能检测")
-                Text("看清每一片晶圆", style = MaterialTheme.typography.headlineSmall)
-                Text("从原始数据到缺陷洞察", style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant)
-            }
-            WaferArtwork(Modifier.size(art))
-        }
+    StudioPanel(Modifier.fillMaxWidth()) {
+        Text("开始分析", style = MaterialTheme.typography.titleMedium)
+        Text("导入文件或图片，查看晶圆图、良率和检测报告。", style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant)
         GlassButton(onImport, Modifier.fillMaxWidth(), enabled = enabled, prominent = true) { Text("导入晶圆数据") }
         Text("STDF · ATDF · CSV · JSON · Parquet", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GlassButton(onImage, Modifier.weight(1f), enabled = enabled) { Text("识别晶圆图片") }
+            GlassButton(onDemo, Modifier.weight(1f), enabled = enabled) { Text("载入演示晶圆") }
+        }
+        TextButton(onGuide, enabled = enabled) { Text(WaferSourceGuideTitle) }
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ActionTile("识别晶圆图片", "选择图片并校准网格", StudioIcon.PHOTO, onImage, Modifier.weight(1f), enabled)
-        ActionTile("载入演示晶圆", "27 张真实样本与 3 张人工演示", StudioIcon.WAFER, onDemo, Modifier.weight(1f), enabled)
-    }
-    TextButton(onGuide, enabled = enabled) { Text(WaferSourceGuideTitle) }
 }
 

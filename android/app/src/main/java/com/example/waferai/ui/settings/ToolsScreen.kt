@@ -21,6 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.example.waferai.ui.theme.LocalFloatingNavigationPadding
 import com.example.waferai.BuildConfig
@@ -29,41 +31,42 @@ import com.example.waferai.ui.theme.GlassButton
 import com.example.waferai.ui.theme.Appearance
 import com.example.waferai.ui.theme.AppLanguage
 import com.example.waferai.ui.theme.StartTab
-import com.example.waferai.ui.theme.StudioAction
 import com.example.waferai.ui.theme.StudioHeader
 import com.example.waferai.ui.theme.StudioIcon
 import com.example.waferai.ui.theme.BackButton
-import androidx.compose.foundation.layout.Row
-import com.example.waferai.ui.theme.ActionTile
 import com.example.waferai.ui.theme.SectionHeading
-import com.example.waferai.ui.theme.StudioPanel
 import com.example.waferai.ui.theme.StudioActionGroup
 import com.example.waferai.ui.theme.StudioLink
-import com.example.waferai.ui.theme.StatusPill
 import com.example.waferai.ui.theme.UiText as Text
 
 @Composable
 internal fun ToolsScreen(onLogs: () -> Unit, onKnowledge: () -> Unit, onTrain: () -> Unit, onPlugins: () -> Unit,
+                         onTheme: () -> Unit = {}, onLanguage: () -> Unit = {}, onGeneral: () -> Unit = {},
+                         onBackup: () -> Unit = {}, onModels: () -> Unit = {}, onAbout: () -> Unit = {},
                          modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp).padding(bottom = LocalFloatingNavigationPadding.current),
+    androidx.compose.foundation.lazy.LazyColumn(modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalFloatingNavigationPadding.current),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StudioHeader("工具箱", "WAFERAI / TOOLKIT", StudioIcon.TOOLS, compact = true)
-        StudioPanel(Modifier.fillMaxWidth(), MaterialTheme.colorScheme.primaryContainer) {
-            StatusPill("专业工作流")
-            Text("让分析更进一步", style = MaterialTheme.typography.headlineSmall)
-            Text("连接资料、积累知识、训练模型与追溯操作。", style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        SectionHeading("知识与连接")
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile("知识库", "本机检索与联网搜寻", StudioIcon.BOOK, onKnowledge, Modifier.weight(1f))
-            ActionTile("插件", "连接国内外资料来源", StudioIcon.PLUG, onPlugins, Modifier.weight(1f))
-        }
-        SectionHeading("模型与追溯")
-        StudioActionGroup(listOf(
-            StudioLink("手机模型训练", "自动训练并验证可用于检测的轻量模型。", StudioIcon.TRAINING, onTrain),
-            StudioLink("操作日志", "查看导入、识别、导出与知识库同步记录。", StudioIcon.FILE, onLogs)
-        ))
+        item { StudioHeader("工具箱", "WAFERAI / TOOLKIT", StudioIcon.TOOLS, compact = true) }
+        item { SectionHeading("常用设置") }
+        item { StudioActionGroup(listOf(
+            StudioLink("主题", "颜色、字体、选项卡透明度与动画", StudioIcon.THEME, onTheme),
+            StudioLink("语言选择", "选择 App 的显示语言。", StudioIcon.LANGUAGE, onLanguage),
+            StudioLink("常规设置", "启动页面、良率阈值与报告阅读模式", StudioIcon.TOOLS, onGeneral),
+            StudioLink("备份与恢复", "导出或恢复本机晶圆数据。", StudioIcon.BACKUP, onBackup),
+            StudioLink("AI 模型管理", "添加模型、配置连接与密钥", StudioIcon.AI, onModels)
+        )) }
+        item { SectionHeading("知识与连接") }
+        item { StudioActionGroup(listOf(
+            StudioLink("知识库", "搜索已保存资料，支持离线查看", StudioIcon.BOOK, onKnowledge),
+            StudioLink("插件", "管理联网搜索的资料来源", StudioIcon.PLUG, onPlugins)
+        )) }
+        item { SectionHeading("高级工具") }
+        item { StudioActionGroup(listOf(
+            StudioLink("手机模型训练", "用已标注样本训练本机轻量模型", StudioIcon.TRAINING, onTrain),
+            StudioLink("操作日志", "遇到问题时查看处理记录", StudioIcon.FILE, onLogs)
+        )) }
+        item { StudioActionGroup(listOf(StudioLink("关于", "版本、帮助中心、使用条款与隐私政策", StudioIcon.BOOK, onAbout))) }
     }
 }
 
@@ -86,6 +89,12 @@ internal fun GeneralScreen(
     onTheme: () -> Unit, modifier: Modifier
 ) {
     SettingsPage("常规设置", onBack, modifier) {
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("报告阅读模式", Modifier.weight(1f))
+            androidx.compose.material3.Switch(appearance.reportReading, { onChange(appearance.copy(reportReading = it)) },
+                Modifier.semantics { contentDescription = "报告阅读模式" })
+        }
         SettingGroup("启动页面") {
             StartTab.entries.forEach { tab ->
                 FilterChip(tab == appearance.startTab, { onChange(appearance.copy(startTab = tab)) }, { Text(tab.label) })
@@ -114,6 +123,7 @@ internal fun BackupScreen(
     SettingsPage("备份与恢复", onBack.takeUnless { busy }, modifier) {
         Text("备份包括晶圆、批次、识别结果、检测记录和已保存的晶圆解析。")
         Text("聊天记录、AI 配置、密钥和设置留在本机。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!canRestore) Text("处理任务结束或取消后可恢复备份。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         GlassButton(onExport, Modifier.fillMaxWidth(), enabled = !busy, prominent = true) { Text("导出备份") }
         GlassButton({ confirm = true }, Modifier.fillMaxWidth(), enabled = !busy && canRestore) { Text("恢复备份") }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -149,3 +159,4 @@ private fun SettingGroup(title: String, content: @Composable () -> Unit) {
         }
     }
 }
+

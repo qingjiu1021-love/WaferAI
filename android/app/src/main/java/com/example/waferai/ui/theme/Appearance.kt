@@ -52,7 +52,7 @@ enum class AppLanguage(val label: String, val tag: String) {
         return entries.firstOrNull { it.tag == locale.language } ?: ENGLISH
     }
 }
-enum class StartTab(val label: String) { WAFER("晶圆"), DATA("数据"), AI("AI"), TOOLS("工具"), PROFILE("我的") }
+enum class StartTab(val label: String) { WAFER("晶圆"), DATA("数据"), AI("AI"), TOOLS("工具") }
 
 enum class AppFont(val label: String, val family: FontFamily) {
     DEFAULT("默认", FontFamily.Default),
@@ -73,6 +73,9 @@ data class Appearance(
     val tabMotion: TabMotion = TabMotion.SLIDE,
     val glass: GlassLevel = GlassLevel.STANDARD,
     val navOpacity: Int = 52,
+    val panelOpacity: Int = 28,
+    val panelGlass: GlassLevel = GlassLevel.STANDARD,
+    val reportReading: Boolean = true,
     val chatMemory: Boolean = true,
     val font: AppFont = AppFont.DEFAULT,
     val downloadedFont: String? = null,
@@ -94,6 +97,8 @@ internal val KnowledgeIntervals = listOf(1, 3, 6, 12, 24, 48, 168)
 
 internal val LocalFloatingNavigationPadding = staticCompositionLocalOf { 0.dp }
 internal val LocalGlassLevel = staticCompositionLocalOf { GlassLevel.STANDARD }
+internal val LocalPanelOpacity = staticCompositionLocalOf { 28 }
+internal val LocalPanelGlass = staticCompositionLocalOf { GlassLevel.STANDARD }
 
 class AppearancePreferences(context: Context) {
     private val preferences = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
@@ -118,7 +123,10 @@ class AppearancePreferences(context: Context) {
             bottomBar = preferences.option("bottom_bar", BottomBarStyle.FLOATING),
             tabMotion = preferences.option("tab_motion", TabMotion.SLIDE),
             glass = preferences.option("glass", GlassLevel.STANDARD),
-            navOpacity = preferences.getInt("nav_opacity", defaults.navOpacity).coerceIn(35, 100),
+            navOpacity = preferences.getInt("nav_opacity", defaults.navOpacity).coerceIn(0, 100),
+            panelOpacity = preferences.getInt("panel_opacity", defaults.panelOpacity).coerceIn(0, 100),
+            panelGlass = preferences.option("panel_glass", defaults.panelGlass),
+            reportReading = preferences.getBoolean("report_reading", true),
             chatMemory = preferences.getBoolean("chat_memory", true),
             font = preferences.option("font", AppFont.DEFAULT),
             downloadedFont = preferences.getString("downloaded_font", null),
@@ -130,7 +138,7 @@ class AppearancePreferences(context: Context) {
             knowledgeHours = preferences.getInt("knowledge_hours", 24).takeIf { it in KnowledgeIntervals } ?: 24,
             yieldThreshold = preferences.getInt("yield_threshold", 90).coerceIn(1, 100),
             language = preferences.option("language", AppLanguage.CHINESE),
-            startTab = preferences.option("start_tab", StartTab.WAFER),
+            startTab = if (preferences.getString("start_tab", null) == "PROFILE") StartTab.TOOLS else preferences.option("start_tab", StartTab.WAFER),
             chatProfileId = preferences.getString("chat_profile_id", null),
             chatThinking = preferences.getStringSet("chat_thinking", emptySet()).orEmpty().mapNotNull { entry ->
                 val id = entry.substringBefore(':')
@@ -152,6 +160,9 @@ class AppearancePreferences(context: Context) {
             .putString("tab_motion", appearance.tabMotion.name)
             .putString("glass", appearance.glass.name)
             .putInt("nav_opacity", appearance.navOpacity)
+            .putInt("panel_opacity", appearance.panelOpacity)
+            .putString("panel_glass", appearance.panelGlass.name)
+            .putBoolean("report_reading", appearance.reportReading)
             .putBoolean("chat_memory", appearance.chatMemory)
             .putString("font", appearance.font.name)
             .putString("downloaded_font", appearance.downloadedFont)

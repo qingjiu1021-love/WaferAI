@@ -95,9 +95,10 @@ internal fun WaferRecordCard(record: WaferRecord, onClick: () -> Unit, modifier:
                              selectedLabel: String = "已选为晶圆 A") {
     val scheme = MaterialTheme.colorScheme
     val color = if (100.0 * record.yieldRate < threshold) scheme.error else scheme.primary
-    Surface(onClick, modifier.fillMaxWidth(), enabled = enabled, shape = RoundedCornerShape(20.dp),
-        color = if (selected) scheme.primaryContainer else scheme.surfaceContainer,
-        border = BorderStroke(1.dp, if (selected) scheme.primary else scheme.outlineVariant.copy(alpha = 0.5f))) {
+    Surface(onClick, modifier.fillMaxWidth().panelGlass(
+        if (selected) scheme.primaryContainer else scheme.surfaceContainer, RoundedCornerShape(20.dp)),
+        enabled = enabled, shape = RoundedCornerShape(20.dp), color = Color.Transparent,
+        border = if (selected) BorderStroke(1.dp, scheme.primary) else null) {
         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             YieldRing(record.yieldRate, color = color)

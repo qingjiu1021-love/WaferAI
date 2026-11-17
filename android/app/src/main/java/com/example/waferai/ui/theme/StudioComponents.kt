@@ -69,8 +69,7 @@ internal fun StudioPanel(
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(modifier, shape = RoundedCornerShape(24.dp), color = color,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))) {
+    Surface(modifier.panelGlass(color), shape = RoundedCornerShape(24.dp), color = Color.Transparent) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
@@ -86,9 +85,9 @@ internal fun StudioAction(
     grouped: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
-    Surface(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth(),
-        shape = if (grouped) RectangleShape else RoundedCornerShape(20.dp), color = scheme.surfaceContainer,
-        border = if (grouped) null else BorderStroke(0.5.dp, scheme.outlineVariant.copy(alpha = 0.18f))) {
+    Surface(onClick = onClick, enabled = enabled,
+        modifier = modifier.fillMaxWidth().then(if (grouped) Modifier else Modifier.panelGlass(shape = RoundedCornerShape(20.dp))),
+        shape = if (grouped) RectangleShape else RoundedCornerShape(20.dp), color = Color.Transparent) {
         Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             StudioBadge(icon, size = 36)
@@ -128,8 +127,8 @@ internal fun StudioBadge(icon: StudioIcon, size: Int = 36) {
 internal data class StudioLink(val title: String, val detail: String, val icon: StudioIcon, val onClick: () -> Unit)
 
 @Composable internal fun StudioActionGroup(links: List<StudioLink>) {
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))) {
+    Surface(Modifier.fillMaxWidth().panelGlass(shape = RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp), color = Color.Transparent) {
         Column {
             links.forEachIndexed { index, link ->
                 StudioAction(link.title, link.detail, link.icon, link.onClick, grouped = true)

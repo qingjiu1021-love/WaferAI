@@ -10,6 +10,7 @@ import com.example.waferai.data.local.DemoWafer
 import com.example.waferai.data.local.WaferFileFormat
 import com.example.waferai.data.local.WaferImageOptions
 import com.example.waferai.data.report.ReportSnapshot
+import com.example.waferai.data.report.AnalysisStage
 import com.example.waferai.data.repository.ImportRepository
 import com.example.waferai.data.repository.ConversionSource
 import com.example.waferai.data.local.AiAnalysis
@@ -41,8 +42,14 @@ data class ImportUiState(
     val analyzing: Boolean = false,
     val analysis: AiAnalysis? = null,
     val analysisError: String? = null,
-    val filePreview: WaferDetail? = null
-)
+    val filePreview: WaferDetail? = null,
+    val localStage: AnalysisStage? = null,
+    val localError: String? = null,
+    val reportReady: Boolean = false,
+    val reportGeneration: Int = 0
+) {
+    val busy get() = loading || predicting || exporting || analyzing || localStage != null
+}
 
 data class GuideUiState(val saving: Boolean = false, val message: String? = null, val error: String? = null)
 
@@ -138,10 +145,42 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     val state = mutableState.asStateFlow()
     private var pendingReport: ReportSnapshot? = null
     private var analysisJob: Job? = null
+    private var localJob: Job? = null
+
+    fun analyzeAll(threshold: Int) {
+        val current = mutableState.value
+        val wafer = current.wafer ?: return
+        if (current.busy) return
+        mutableState.value = current.copy(localStage = AnalysisStage.STATISTICS, localError = null, reportReady = false)
+        localJob = viewModelScope.launch {
+            try {
+                val result = repository.localAnalysis.analyzeCurrent(wafer, threshold) { stage ->
+                    if (mutableState.value.wafer?.id == wafer.id) {
+                        mutableState.value = mutableState.value.copy(localStage = stage)
+                    }
+                }
+                if (mutableState.value.wafer?.id == wafer.id) {
+                    mutableState.value = mutableState.value.copy(localStage = null, prediction = result.inspection.prediction,
+                        inspection = result.inspection.record, reportReady = true, localError = null,
+                        reportGeneration = mutableState.value.reportGeneration + 1,
+                        predictionNotice = "一键分析完成，检测结果和 PDF 报告已保存在本机。")
+                }
+            } catch (cancelled: CancellationException) {
+                if (mutableState.value.wafer?.id == wafer.id) mutableState.value = mutableState.value.copy(
+                    localStage = null, localError = "分析已取消，已保存的数据仍保留。")
+                throw cancelled
+            } catch (error: Exception) {
+                if (mutableState.value.wafer?.id == wafer.id) mutableState.value = mutableState.value.copy(
+                    localStage = null, localError = error.message ?: "分析失败，请重试。")
+            }
+        }
+    }
+
+    fun cancelLocalAnalysis() { localJob?.cancel() }
 
     fun loadDemo(sample: DemoWafer) {
         val current=mutableState.value
-        if(current.loading || current.predicting || current.exporting || current.analyzing) return
+        if(current.busy) return
         mutableState.value=ImportUiState(loading=true)
         viewModelScope.launch {
             try {
@@ -157,7 +196,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         val current=mutableState.value
         val wafer=current.wafer ?: return
         val prediction=current.prediction ?: return
-        if(current.loading || current.predicting || current.exporting || current.analyzing) return
+        if(current.busy) return
         mutableState.value=current.copy(analyzing=true,analysisError=null)
         analysisJob=viewModelScope.launch {
             try {
@@ -181,7 +220,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
 
     fun returnToWorkspace(): Boolean {
         val current = mutableState.value
-        if (current.loading || current.predicting || current.exporting || current.analyzing) return false
+        if (current.busy) return false
         pendingReport = null
         preparedFile = null
         mutableState.value = ImportUiState()
@@ -190,7 +229,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
 
     fun openWafer(waferId: Int): Boolean {
         val current = mutableState.value
-        if (current.loading || current.predicting || current.exporting || current.analyzing) return false
+        if (current.busy) return false
         pendingReport = null
         preparedFile = null
         mutableState.value = ImportUiState(loading = true)
@@ -216,7 +255,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
 
     fun previewFile(uri: Uri) {
         val current = mutableState.value
-        if (current.loading || current.predicting || current.exporting || current.analyzing || current.filePreview != null) return
+        if (current.busy || current.filePreview != null) return
         mutableState.value = current.copy(loading = true, error = null)
         viewModelScope.launch {
             try {
@@ -248,7 +287,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         importFrom(inspectAt = threshold) { repository.importImage(uri, options) }
 
     private fun importFrom(inspectAt: Int? = null, read: suspend () -> com.example.waferai.data.remote.ImportResponse) {
-        if (mutableState.value.loading || mutableState.value.predicting || mutableState.value.exporting || mutableState.value.analyzing) return
+        if (mutableState.value.busy) return
         mutableState.value = ImportUiState(loading = true)
         viewModelScope.launch {
             try {
@@ -300,7 +339,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     fun inspectWafer(threshold: Int, trained: Boolean = false) {
         val current = mutableState.value
         val waferId = current.wafer?.id ?: return
-        if (current.loading || current.predicting || current.exporting || current.analyzing) return
+        if (current.busy) return
         mutableState.value = current.copy(predicting = true, predictionError = null, analysisError = null)
         viewModelScope.launch {
             try {
@@ -336,7 +375,7 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
     fun prepareReportExport(): String? {
         val current = mutableState.value
         val wafer = current.wafer ?: return null
-        if (current.loading || current.predicting || current.exporting || current.analyzing) return null
+        if (current.busy) return null
         val snapshot = ReportSnapshot(wafer, current.prediction, analysis = current.analysis, inspection = current.inspection)
         pendingReport = snapshot
         mutableState.value = current.copy(exporting = true, exportMessage = null, exportError = null)
@@ -375,3 +414,4 @@ class ImportViewModel(private val repository: ImportRepository) : ViewModel() {
         }
     }
 }
+

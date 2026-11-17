@@ -8,7 +8,7 @@ import androidx.compose.ui.unit.dp
 import com.example.waferai.ui.theme.StudioGlyph
 import com.example.waferai.ui.theme.StudioIcon
 
-private val tabIcons = listOf(StudioIcon.WAFER, StudioIcon.DATA, StudioIcon.AI, StudioIcon.TOOLS, StudioIcon.PERSON)
+private val tabIcons = listOf(StudioIcon.WAFER, StudioIcon.DATA, StudioIcon.AI, StudioIcon.TOOLS)
 
 @Composable
 fun TabIcon(index: Int, color: Color) {

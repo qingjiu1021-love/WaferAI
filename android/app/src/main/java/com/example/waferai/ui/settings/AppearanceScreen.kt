@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.waferai.ui.theme.Appearance
+import com.example.waferai.ui.theme.panelGlass
 import com.example.waferai.ui.theme.BottomBarStyle
 import com.example.waferai.ui.theme.GlassLevel
 import com.example.waferai.ui.theme.PaletteStyle
@@ -79,9 +80,12 @@ fun AppearanceScreen(
     onReset: () -> Boolean,
     canReset: Boolean,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPreviewOpacity: (Int?) -> Unit = {},
+    onPreviewPanelOpacity: (Int?) -> Unit = {}
 ) {
     var showPalette by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onPreviewOpacity(null); onPreviewPanelOpacity(null) } }
     var showFonts by rememberSaveable { mutableStateOf(false) }
     var showColor by rememberSaveable { mutableStateOf(false) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
@@ -200,15 +204,33 @@ fun AppearanceScreen(
                 )
             }
 
-            if (appearance.bottomBar == BottomBarStyle.FLOATING && appearance.glass != GlassLevel.NONE) {
+            run {
                 var opacity by remember(appearance.navOpacity) { mutableFloatStateOf(appearance.navOpacity.toFloat()) }
                 SettingsCard {
                     Column(Modifier.padding(16.dp)) {
-                        Text("底栏不透明度 · ${opacity.roundToInt()}%")
-                        Slider(opacity, { opacity = it }, valueRange = 35f..100f, steps = 12,
-                            onValueChangeFinished = { onChange(appearance.copy(navOpacity = opacity.roundToInt())) },
-                            modifier = Modifier.semantics { contentDescription = "底栏不透明度" })
+                        Text("底部导航透明度 · ${100 - opacity.roundToInt()}%")
+                        Slider(100f - opacity, { opacity = 100f - it; onPreviewOpacity(opacity.roundToInt()) }, valueRange = 0f..100f,
+                            onValueChangeFinished = { onChange(appearance.copy(navOpacity = opacity.roundToInt())); onPreviewOpacity(null) },
+                            modifier = Modifier.semantics { contentDescription = "选项卡透明度" })
+                        Text("0% 为不透明，100% 为透明。文字和选中状态始终保留。", style = MaterialTheme.typography.bodySmall)
                     }
+                }
+            }
+
+            SectionTitle("▱", "页面选项框")
+            ThemeChoices(GlassLevel.entries, appearance.panelGlass, { it.label }, { onChange(appearance.copy(panelGlass = it)) }) {
+                ThemeMiniature(appearance.copy(glass = it), Modifier.size(44.dp, 32.dp))
+            }
+            SettingsCard {
+                var panelOpacity by remember(appearance.panelOpacity) { mutableFloatStateOf(appearance.panelOpacity.toFloat()) }
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("页面选项框透明度 · ${100 - panelOpacity.roundToInt()}%")
+                    Slider(value = 100f - panelOpacity,
+                        onValueChange = { panelOpacity = 100f - it; onPreviewPanelOpacity(panelOpacity.roundToInt()) },
+                        onValueChangeFinished = { onChange(appearance.copy(panelOpacity = panelOpacity.roundToInt())); onPreviewPanelOpacity(null) },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.semantics { contentDescription = "页面选项框透明度" })
+                    Text("独立调节页面卡片和选项框。100% 完全透明，背景保持清晰，无模糊。", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -415,9 +437,9 @@ private fun SectionTitle(symbol: String, title: String) {
 @Composable
 private fun SettingsCard(content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().panelGlass(shape = RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) { content() }
 }
 

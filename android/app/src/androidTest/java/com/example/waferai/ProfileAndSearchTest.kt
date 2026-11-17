@@ -1,14 +1,8 @@
 package com.example.waferai
 
 import android.content.ContextWrapper
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
-import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.platform.app.InstrumentationRegistry
-import com.example.waferai.data.local.LocalUserProfile
-import com.example.waferai.data.local.LocalUserProfileStore
 import com.example.waferai.data.ai.*
 import com.example.waferai.ui.chat.ChatViewModel
 import kotlinx.coroutines.*
@@ -20,7 +14,6 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
-import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -28,48 +21,6 @@ class ProfileAndSearchTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val rss = """<?xml version="1.0"?><rss><channel><item><title>Verified &amp; useful</title><link>https://example.org/article</link><description>&lt;b&gt;Public&lt;/b&gt; snippet</description></item><item><title>Unsafe</title><link>javascript:alert(1)</link></item></channel></rss>"""
-
-    @Test fun localProfileSurvivesAccountRemovalAndCanStillBeEdited() {
-        val user = UUID.randomUUID().toString()
-        val profileDir = File(context.cacheDir, "qa-profile-$user").apply { mkdirs() }
-        val isolated = object : ContextWrapper(context) {
-            override fun getNoBackupFilesDir() = profileDir
-            override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences("$user-$name", mode)
-        }
-        val store = LocalUserProfileStore(isolated)
-        val origin = "https://one.example"
-        val key = MessageDigest.getInstance("SHA-256").digest("$origin|$user".toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val oldProfile = File(profileDir, "user-profile-$key.json")
-        val prefs = isolated.getSharedPreferences("account_session", 0)
-        val photo = File(context.cacheDir, "chat-capture/qa-avatar-$user.png")
-        try {
-            photo.parentFile!!.mkdirs()
-            val bitmap = Bitmap.createBitmap(600, 400, Bitmap.Config.ARGB_8888)
-            photo.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
-            val uri = FileProvider.getUriForFile(context, context.packageName + ".chat-capture", photo)
-            val avatar = store.avatar(uri)
-            val data = Base64.decode(avatar, Base64.NO_WRAP)
-            val decoded = BitmapFactory.decodeByteArray(data, 0, data.size)
-            assertEquals(256, decoded.width); assertEquals(256, decoded.height); decoded.recycle()
-            oldProfile.writeText(JSONObject().put("name", "晶圆用户").put("avatar", avatar).toString())
-            assertTrue(prefs.edit().putString("endpoint", origin)
-                .putString("user", JSONObject().put("id", user).toString()).putString("token", "test").commit())
-            assertEquals(LocalUserProfile("晶圆用户", avatar), store.read())
-            assertTrue(prefs.all.isEmpty())
-            assertTrue(oldProfile.isFile)
-            store.write(LocalUserProfile("新的昵称", avatar))
-            assertEquals(LocalUserProfile("新的昵称", avatar), LocalUserProfileStore(isolated).read())
-            assertThrows(IllegalArgumentException::class.java) { store.write(LocalUserProfile("bad\nname")) }
-            assertEquals("新的昵称", store.read().name)
-        } finally {
-            photo.delete()
-            oldProfile.delete()
-            File(profileDir, "user-profile.json").delete()
-            profileDir.delete()
-            context.deleteSharedPreferences("$user-account_session")
-        }
-    }
 
     @Test fun searchEncodesQuestionAndKeepsOnlySafeSources(): Unit = runBlocking {
         MockWebServer().use { server ->

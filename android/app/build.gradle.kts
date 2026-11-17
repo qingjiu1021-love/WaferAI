@@ -16,14 +16,20 @@ android {
         minSdk = 26
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
-        versionCode = 66
-        versionName = "5.2.3"
+        versionCode = 70
+        versionName = "5.4.2"
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        create("benchmark") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -46,6 +52,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

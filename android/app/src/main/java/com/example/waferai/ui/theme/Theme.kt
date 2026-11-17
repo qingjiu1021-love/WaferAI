@@ -150,6 +150,7 @@ fun WaferAITheme(
     val direction = if (language == AppLanguage.ARABIC) LayoutDirection.Rtl else LayoutDirection.Ltr
     CompositionLocalProvider(
         LocalDensity provides density, LocalGlassLevel provides appearance.glass,
+        LocalPanelOpacity provides appearance.panelOpacity, LocalPanelGlass provides appearance.panelGlass,
         LocalStarryNight provides (starry && dark),
         LocalAppLanguage provides language, LocalEnglish provides !language.chinese, LocalLayoutDirection provides direction
     ) {

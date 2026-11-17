@@ -54,6 +54,7 @@ internal sealed interface ConversionSource {
 }
 
 class ImportRepository(private val context: Context) {
+    internal val localAnalysis by lazy { com.example.waferai.data.report.LocalAnalysisService(context, this) }
     private val resolver = context.contentResolver
     val store = LocalWaferStore(context)
     internal val testHistory by lazy { com.example.waferai.data.local.WaferTestHistory(context) }

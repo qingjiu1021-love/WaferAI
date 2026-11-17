@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -27,6 +26,13 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
+@Composable
+internal fun Modifier.panelGlass(
+    tint: Color = MaterialTheme.colorScheme.surfaceContainer,
+    shape: Shape = RoundedCornerShape(24.dp)
+): Modifier = glassSurface(tint, MaterialTheme.colorScheme.primary, shape, LocalPanelGlass.current,
+    MaterialTheme.colorScheme.surface.luminance() < 0.4f, LocalPanelOpacity.current / 100f)
+
 internal fun Modifier.glassSurface(
     tint: Color,
     accent: Color,
@@ -35,14 +41,15 @@ internal fun Modifier.glassSurface(
     dark: Boolean,
     opacity: Float = 1f
 ): Modifier {
-    if (level == GlassLevel.NONE) return clip(shape).background(tint)
+    if (opacity <= 0f) return clip(shape)
+    if (level == GlassLevel.NONE) return clip(shape).background(tint.copy(alpha = opacity.coerceIn(0f, 1f)))
 
     val intense = level == GlassLevel.INTENSE
     val highlight = if (intense) 0.11f else 0.055f
     val safeHighlight = if (tint.luminance() < 0.18f) highlight * 0.6f else highlight
     val fill = Brush.verticalGradient(
         0f to lerp(tint, Color.White, safeHighlight).copy(alpha = opacity),
-        0.52f to tint.copy(alpha = opacity * if (intense) 0.83f else 0.93f),
+        0.52f to tint.copy(alpha = if (opacity >= 1f) 1f else opacity * if (intense) 0.83f else 0.93f),
         1f to lerp(tint, accent, 0.07f).copy(alpha = opacity)
     )
     val rim = Brush.linearGradient(
@@ -50,7 +57,9 @@ internal fun Modifier.glassSurface(
         0.48f to Color.White.copy(alpha = if (dark) 0.09f else 0.22f),
         1f to accent.copy(alpha = if (intense) 0.30f else 0.17f)
     )
-    return shadow(if (intense) 7.dp else 3.dp, shape)
+    // Transparent glass must not cast a dark elevation layer through itself.
+    // Clip every fill and sheen explicitly, including large rounded panels.
+    return clip(shape)
         .background(fill)
         .drawWithCache {
             val sheen = Brush.radialGradient(

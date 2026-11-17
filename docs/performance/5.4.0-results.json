@@ -1,0 +1,125 @@
+{
+  "date": "2026-11-17",
+  "device": "ROG Phone 8 / ASUS_AI2401_A",
+  "androidApi": 36,
+  "library": "AndroidX Macrobenchmark 1.4.1",
+  "iterationsPerScenario": 5,
+  "compilationMode": "Full",
+  "targetVariant": "benchmark (non-debuggable)",
+  "tabRoute": [
+    "AI",
+    "Data",
+    "Tools",
+    "Wafer"
+  ],
+  "routeRepeats": 2,
+  "clickIntervalMs": 700,
+  "baselineVersion": "5.3.0",
+  "candidateVersion": "5.4.0",
+  "before": {
+    "startupMs": {
+      "timeToInitialDisplayMs": {
+        "minimum": 186.759583,
+        "maximum": 222.666666,
+        "median": 210.722239,
+        "coefficientOfVariation": 0.07127896106096486,
+        "runs": [
+          222.666666,
+          202.038073,
+          221.362344,
+          210.722239,
+          186.759583
+        ]
+      },
+      "timeToFullDisplayMs": {
+        "minimum": 2456.577395,
+        "maximum": 2495.25802,
+        "median": 2479.028801,
+        "coefficientOfVariation": 0.006467532026959943,
+        "runs": [
+          2495.25802,
+          2474.245155,
+          2494.613072,
+          2479.028801,
+          2456.577395
+        ]
+      }
+    },
+    "framesMs": {
+      "frameDurationCpuMs": {
+        "P50": 3.15651,
+        "P90": 4.1396402000000005,
+        "P95": 4.62610645,
+        "P99": 6.184370429999994
+      },
+      "frameOverrunMs": {
+        "P50": -7.6765075,
+        "P90": -6.8316935999999995,
+        "P95": -6.1477795,
+        "P99": -3.5870969600000002
+      }
+    }
+  },
+  "after": {
+    "startupMs": {
+      "timeToInitialDisplayMs": {
+        "minimum": 187.753177,
+        "maximum": 224.277031,
+        "median": 199.547812,
+        "coefficientOfVariation": 0.07995826100158508,
+        "runs": [
+          224.277031,
+          199.547812,
+          223.250365,
+          187.753177,
+          196.878177
+        ]
+      },
+      "timeToFullDisplayMs": {
+        "minimum": 2462.208541,
+        "maximum": 2503.284061,
+        "median": 2475.935676,
+        "coefficientOfVariation": 0.007022125504174517,
+        "runs": [
+          2503.284061,
+          2475.935676,
+          2495.016926,
+          2462.208541,
+          2469.065936
+        ]
+      }
+    },
+    "framesMs": {
+      "frameDurationCpuMs": {
+        "P50": 3.168854,
+        "P90": 4.001771,
+        "P95": 4.310468999999999,
+        "P99": 6.493734000000015
+      },
+      "frameOverrunMs": {
+        "P50": -7.438034,
+        "P90": -6.873692,
+        "P95": -6.512289,
+        "P99": -4.405122599999973
+      }
+    }
+  },
+  "sha256": {
+    "baselineBenchmark": "71f02b29444331238560e1642a65bb161d61976b57741c264638da1780f00953",
+    "candidateBenchmark": "5d8fcab8b0b635ac990579dc10a26162adec75ddee3ce265e0d03400b039a230",
+    "deliveredDebugApk": "0c7e0ec85d2157681e80f551f77862a5139df9e898b533809c95c30b85bbadea"
+  },
+  "limitations": [
+    "One phone; five iterations per scenario; no claim of universal FPS or zero missed frames.",
+    "TTFD includes the intentional approximately 2.25 second splash animation.",
+    "Frame CPU P99 worsened slightly; improvements are not uniform across percentiles.",
+    "Final debug APK differs from measured benchmark build by build type and a backup-restore queue invalidation guard outside measured routes.",
+    "Failed initial baseline cold-start attempt excluded; successful rerun used for startup."
+  ],
+  "localRawFiles": [
+    "baseline-startup.json",
+    "baseline-tabs.json",
+    "final.json",
+    "final-run.txt"
+  ]
+}

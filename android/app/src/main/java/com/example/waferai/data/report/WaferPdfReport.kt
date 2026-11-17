@@ -47,7 +47,7 @@ data class ReportSnapshot(
 }
 
 /** Native Android PDF generation; the snapshot is independent of later UI changes. */
-class WaferPdfReport(private val snapshot: ReportSnapshot) {
+class WaferPdfReport(private val snapshot: ReportSnapshot, private val checkActive: () -> Unit = {}) {
     private val document = PdfDocument()
     private var page: PdfDocument.Page? = null
     private var pageNumber = 0
@@ -72,6 +72,7 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
     }
 
     private fun newPage() {
+        checkActive()
         finishPage()
         pageNumber++
         page = document.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
@@ -95,6 +96,7 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
     }
 
     private fun paragraph(text: String, size: Float = 10.5f, color: Int = ink, bold: Boolean = false) {
+        checkActive()
         val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint(size, color, bold), contentWidth.toInt())
             .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false)
             .setLineSpacing(2f, 1f).setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).build()
@@ -303,6 +305,7 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
 
     fun generate(): ByteArray {
         try {
+            checkActive()
             newPage()
             val time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
                 .withZone(ZoneId.of("Asia/Shanghai")).format(snapshot.requestedAt)
@@ -365,6 +368,7 @@ class WaferPdfReport(private val snapshot: ReportSnapshot) {
                 analysis.content.lines().filter { it.isNotBlank() }.forEach { paragraph(it) }
             }
             finishPage()
+            checkActive()
             val output = ByteArrayOutputStream()
             document.writeTo(output)
             return output.toByteArray()

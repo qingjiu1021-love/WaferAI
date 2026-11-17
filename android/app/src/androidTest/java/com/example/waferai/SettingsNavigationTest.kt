@@ -15,10 +15,11 @@ class SettingsNavigationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun bottomTabKeepsItsPositionAndSelectionWhenOpeningAndLeavingSettings() {
-        val profileLabel = hasText("我的") or hasText("Me")
+        val profileLabel = hasText("工具") or hasText("Tools")
         val tab = compose.onNode(profileLabel and hasClickAction())
         compose.waitUntil(12_000) { compose.onAllNodes(profileLabel and hasClickAction()).fetchSemanticsNodes().size == 1 }
         tab.performClick()
+        compose.onNode((hasText("我的") or hasText("Me")) and hasClickAction()).assertDoesNotExist()
         val selected = compose.onNode(profileLabel and isSelected())
         val initialBounds = selected.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
 
